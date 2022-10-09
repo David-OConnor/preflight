@@ -2,8 +2,8 @@
 
 pub const F32_BYTES: usize = 4;
 
-const CRC_POLY: u8 = 0xab;
-const CRC_LUT: [u8; 256] = crc_init(CRC_POLY);
+pub const CRC_POLY: u8 = 0xab;
+pub const CRC_LUT: [u8; 256] = crc_init(CRC_POLY);
 
 pub const QUATERNION_SIZE: usize = F32_BYTES * 4; // Quaternion (4x4 + altimeter + voltage reading + current reading)
 pub const PARAMS_SIZE: usize = QUATERNION_SIZE + F32_BYTES * 4 + 1; //
@@ -29,11 +29,9 @@ pub const REFRESH_INTERVAL: u32 = 50;
 
 use num_enum::TryFromPrimitive; // Enum from integer
 
-use serde::Serialize;
-
 // Note that serialize, and for ArmStatus, default, are not part of the firmware
 
-#[derive(Clone, Copy, PartialEq, Serialize, TryFromPrimitive)]
+#[derive(Clone, Copy, PartialEq, TryFromPrimitive)]
 #[repr(u8)]
 pub enum InputModeSwitch {
     /// Acro mode
@@ -49,7 +47,7 @@ impl Default for InputModeSwitch {
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy, PartialEq, Serialize, TryFromPrimitive)]
+#[derive(Clone, Copy, PartialEq, TryFromPrimitive)]
 pub enum ArmStatus {
     /// Motors are [pre]disarmed
     Disarmed = 0,
@@ -107,7 +105,7 @@ impl MsgType {
     }
 }
 
-#[derive(Default, Serialize, Clone)]
+#[derive(Default, Clone)]
 pub struct ChannelData {
     /// Aileron, -1. to 1.
     pub roll: f32,
@@ -123,7 +121,7 @@ pub struct ChannelData {
     // todo: Auto-recover commanded, auto-TO/land/RTB, obstacle avoidance etc.
 }
 
-// #[derive(Default, Serialize, Clone)]
+// #[derive(Default, Clone)]
 // pub struct Params {
 //     // todo: Do we want to use this full struct, or store multiple (3+) instantaneous ones?
 //     pub s_x: f32,
@@ -224,7 +222,7 @@ pub fn calc_crc(lut: &[u8; 256], data: &[u8], mut size: u8) -> u8 {
     crc
 }
 
-#[derive(Clone, Copy, Default, Serialize)]
+#[derive(Clone, Copy, Default)]
 pub struct Quaternion {
     pub w: f32,
     pub x: f32,
@@ -238,7 +236,7 @@ pub enum AircraftType {
     FlyingWing,
 }
 
-#[derive(Clone, Default, Serialize)]
+#[derive(Clone, Default)]
 /// https://www.expresslrs.org/2.0/faq/#how-many-channels-does-elrs-support
 pub struct LinkStats {
     /// Timestamp these stats were recorded. (TBD format; processed locally; not part of packet from tx).
@@ -269,7 +267,7 @@ pub struct LinkStats {
     pub downlink_snr: i8,
 }
 
-#[derive(Default, Clone, Serialize)]
+#[derive(Default, Clone)]
 pub struct Location {
     // Note: unlike Location in the main program, we ommit location type, and use String for name.
     pub name: String,
