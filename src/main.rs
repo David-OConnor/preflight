@@ -1,3 +1,6 @@
+// Don't show the console window when run from an executable.
+#![windows_subsystem = "windows"]
+
 use std::{
     convert::TryInto,
     f32::consts::TAU,
@@ -18,29 +21,41 @@ mod ui;
 
 const FC_SERIAL_NUMBER: &'static str = "AN";
 
+// todo: Higher; set here and on FC.
 const BAUD: u32 = 9_600;
 
 // At this interval, in seconds, request new data from the FC.
 // todo: Do you want some (or all?) of the read data to be pushed at a regular
 // todo interval on request from this program, or pushed at an interval from the FC
 // todo without explicitly requesting here?
-
+// todo: Also: multiple intervals for different sorts of data, eg update
+// todo attitude at a higher rate than other things.
 const READ_INTERVAL: f32 = 0.2;
+const READ_INTERVAL_MS: u128 = (READ_INTERVAL * 1_000.) as u128;
 
 /// Data passed by the flight controller
-struct State {
+#[derive(Clone)] // todo: Remove clone here if you don't use it.
+pub struct State {
     pub attitude: Quaternion,
+    pub attitude_commanded: Quaternion,
     pub controls: ChannelData,
     pub link_stats: LinkStats,
     pub waypoints: [Option<Location>; MAX_WAYPOINTS],
-    pub altimeter_baro: f32,
-    pub altimeter_agl: Option<f32>,
+    pub altitude_baro: f32,
+    pub altitude_agl: Option<f32>,
     pub batt_v: f32,
     pub current: f32,
+    pub lat: Option<f32>,
+    pub lon: Option<f32>,
     pub last_attitude_update: Instant,
     pub last_controls_update: Instant,
     pub last_link_stats_update: Instant,
+    pub system_status: SystemStatus,
     pub aircraft_type: AircraftType,
+    /// Note directly pulled from the FC; usd for sequencing read
+    /// todo: Consider diff update rate (and last query times) for
+    /// todo different types of data.
+    pub last_fc_query: Instant,
 }
 
 impl Default for State {
@@ -54,17 +69,22 @@ impl Default for State {
 
         Self {
             attitude: Quaternion::new_identity(),
+            attitude_commanded: Quaternion::new_identity(),
             controls: Default::default(),
             link_stats: Default::default(),
             waypoints,
-            altimeter_baro: 0.,
-            altimeter_agl: None,
+            altitude_baro: 0.,
+            altitude_agl: None,
             batt_v: 0.,
             current: 0.,
+            lat: None,
+            lon: None,
             last_attitude_update: Instant::now(),
             last_controls_update: Instant::now(),
             last_link_stats_update: Instant::now(),
+            system_status: Default::default(),
             aircraft_type: AircraftType::Quadcopter,
+            last_fc_query: Instant::now(),
         }
     }
 }
@@ -203,12 +223,13 @@ pub fn bytes_to_float(bytes: &[u8]) -> f32 {
 }
 
 /// This mirrors that in the Python driver
-struct Fc {
-    pub ser: Box<dyn serialport::SerialPort>,
+pub struct Fc {
+    // todo: Why Box<dyn here? Examine later.
+    pub serial_port: Option<Box<dyn serialport::SerialPort>>,
 }
 
 impl Fc {
-    pub fn new() -> Result<Self, io::Error> {
+    pub fn new() -> Self {
         if let Ok(ports) = serialport::available_ports() {
             for port_info in &ports {
                 if let SerialPortType::UsbPort(info) = &port_info.port_type {
@@ -220,22 +241,31 @@ impl Fc {
                                 .unwrap();
                             // .expect("Failed to open serial port");
 
-                            return Ok(Self { ser: port });
+                            return Self {
+                                serial_port: Some(port),
+                            };
                         }
                     }
                 }
             }
         }
 
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            "Unable to connect to the flight controller.",
-        ))
+        Self { serial_port: None }
     }
 
     /// Request several types of data from the flight controller over USB serial. Return a struct
     /// containing the data.
     pub fn read_all(&mut self, state: &mut State) -> Result<(), io::Error> {
+        let port = match self.serial_port.as_mut() {
+            Some(p) => p,
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotConnected,
+                    "Flight controller not connected",
+                ))
+            }
+        };
+
         let crc_tx_params = calc_crc(
             &CRC_LUT,
             &[MsgType::ReqParams as u8],
@@ -244,11 +274,11 @@ impl Fc {
         let xmit_buf_params = &[MsgType::ReqParams as u8, crc_tx_params];
 
         // Write the buffer requesting params from the FC.
-        self.ser.write(xmit_buf_params)?;
+        port.write(xmit_buf_params)?;
 
         // Read the params passed by the FC in response.
         let mut rx_buf = [0; PARAMS_SIZE + 2];
-        self.ser.read(&mut rx_buf)?;
+        port.read(&mut rx_buf)?;
 
         // The order (or equivalently indices) of params here must match the FC firmware. Use it
         // as a reference.
@@ -260,22 +290,28 @@ impl Fc {
         state.attitude = quat_from_buf(&attitude_data);
         i += QUATERNION_SIZE;
 
-        state.altimeter_baro = f32::from_be_bytes(rx_buf[i..F32_BYTES + i].try_into().unwrap());
-        i += F32_BYTES;
+        let attitude_commanded_data: [u8; QUATERNION_SIZE] =
+            rx_buf[i..QUATERNION_SIZE + i].try_into().unwrap();
 
-        state.altimeter_agl = match rx_buf[i] {
+        state.attitude_commanded = quat_from_buf(&attitude_commanded_data);
+        i += QUATERNION_SIZE;
+
+        state.altitude_baro = f32::from_be_bytes(rx_buf[i..F32_SIZE + i].try_into().unwrap());
+        i += F32_SIZE;
+
+        state.altitude_agl = match rx_buf[i] {
             0 => None,
             _ => Some(f32::from_be_bytes(
-                rx_buf[i + 1..F32_BYTES + i + 1].try_into().unwrap(),
+                rx_buf[i + 1..F32_SIZE + i + 1].try_into().unwrap(),
             )),
         };
-        i += F32_BYTES + 1;
+        i += F32_SIZE + 1;
 
-        state.batt_v = f32::from_be_bytes(rx_buf[i..F32_BYTES + i].try_into().unwrap());
-        i += F32_BYTES;
+        state.batt_v = f32::from_be_bytes(rx_buf[i..F32_SIZE + i].try_into().unwrap());
+        i += F32_SIZE;
 
-        state.current = f32::from_be_bytes(rx_buf[i..F32_BYTES + i].try_into().unwrap());
-        i += F32_BYTES;
+        state.current = f32::from_be_bytes(rx_buf[i..F32_SIZE + i].try_into().unwrap());
+        i += F32_SIZE;
 
         let crc_tx_controls = calc_crc(
             &CRC_LUT,
@@ -284,11 +320,11 @@ impl Fc {
         );
         let xmit_buf_controls = &[MsgType::ReqControls as u8, crc_tx_controls];
 
-        self.ser.write(xmit_buf_controls)?;
+        port.write(xmit_buf_controls)?;
 
         // let mut rx_buf = [0; CONTROLS_SIZE + 2]; // todo: Bogus leading 1?
         let mut rx_buf = [0; CONTROLS_SIZE + 2];
-        self.ser.read(&mut rx_buf)?;
+        port.read(&mut rx_buf)?;
 
         thread::sleep(time::Duration::from_millis(5)); // todo TS
 
@@ -303,10 +339,10 @@ impl Fc {
         let xmit_buf_link_stats = &[MsgType::ReqLinkStats as u8, crc_tx_link_stats];
 
         // todo: DRY between these calls
-        // self.ser.write(xmit_buf_link_stats)?;  // todo put back
+        port.write(xmit_buf_link_stats)?;
 
         let mut rx_buf = [0; LINK_STATS_SIZE + 2];
-        self.ser.read(&mut rx_buf)?;
+        port.read(&mut rx_buf)?;
 
         thread::sleep(time::Duration::from_millis(5)); // todo TS
 
@@ -321,10 +357,10 @@ impl Fc {
         );
         let xmit_buf_waypoints = &[MsgType::ReqWaypoints as u8, crc_waypoints];
 
-        // self.ser.write(xmit_buf_waypoints)?; // todo put back
+        port.write(xmit_buf_waypoints)?;
 
         let mut rx_buf = [0; WAYPOINTS_SIZE + 2];
-        self.ser.read(&mut rx_buf)?;
+        port.read(&mut rx_buf)?;
 
         thread::sleep(time::Duration::from_millis(5)); // todo TS
 
@@ -337,67 +373,104 @@ impl Fc {
 
         state.waypoints = waypoints_data;
 
+        // todo: Lat, Lon
+
         let payload_size = MsgType::ReqParams.payload_size();
-        // let crc_rx_expected = calc_crc(
-        //     &CRC_LUT,
-        //     &rx_buf[..payload_size + 1],
-        //     payload_size as u8 + 1,
-        // );
+        let crc_rx_expected = calc_crc(
+            &CRC_LUT,
+            &rx_buf[..payload_size + 1],
+            payload_size as u8 + 1,
+        );
+        let crc_read = rx_buf[PARAMS_SIZE] + 1;
+        if crc_read != crc_rx_expected {
+            // todo: Do something else here? Eg don't update state and resend.
+            println!("Incorrect CRC from reading params!");
+        }
 
         Ok(())
     }
 
     pub fn send_arm_command(&mut self) -> Result<(), io::Error> {
-        let msg_type = MsgType::ArmMotors;
-        let crc = calc_crc(
-            &CRC_LUT,
-            &[msg_type as u8],
-            msg_type.payload_size() as u8 + 1,
-        );
-        let xmit_buf = &[msg_type as u8, crc];
-        self.ser.write(xmit_buf)?;
+        if let Some(port) = self.serial_port.as_mut() {
+            let msg_type = MsgType::ArmMotors;
+            let crc = calc_crc(
+                &CRC_LUT,
+                &[msg_type as u8],
+                msg_type.payload_size() as u8 + 1,
+            );
+            let xmit_buf = &[msg_type as u8, crc];
+            port.write(xmit_buf)?;
 
-        Ok(())
+            Ok(())
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "Flight controller not connected",
+            ))
+        }
     }
 
     pub fn send_disarm_command(&mut self) -> Result<(), io::Error> {
-        let msg_type = MsgType::DisarmMotors;
-        let crc = calc_crc(
-            &CRC_LUT,
-            &[msg_type as u8],
-            msg_type.payload_size() as u8 + 1,
-        );
-        let xmit_buf = &[msg_type as u8, crc];
-        self.ser.write(xmit_buf)?;
+        if let Some(port) = self.serial_port.as_mut() {
+            let msg_type = MsgType::DisarmMotors;
+            let crc = calc_crc(
+                &CRC_LUT,
+                &[msg_type as u8],
+                msg_type.payload_size() as u8 + 1,
+            );
 
-        Ok(())
+            let xmit_buf = &[msg_type as u8, crc];
+            port.write(xmit_buf)?;
+
+            Ok(())
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "Flight controller not connected",
+            ))
+        }
     }
 
     // todo: These are incomplete. you need to pass which motor etc.
     pub fn send_start_motor_command(&mut self, motor: RotorPosition) -> Result<(), io::Error> {
-        let msg_type = MsgType::StartMotor;
-        let crc = calc_crc(
-            &CRC_LUT,
-            &[msg_type as u8],
-            msg_type.payload_size() as u8 + 1,
-        );
-        let xmit_buf = &[msg_type as u8, motor as u8, crc];
-        self.ser.write(xmit_buf)?;
+        if let Some(port) = self.serial_port.as_mut() {
+            let msg_type = MsgType::StartMotor;
+            let crc = calc_crc(
+                &CRC_LUT,
+                &[msg_type as u8],
+                msg_type.payload_size() as u8 + 1,
+            );
 
-        Ok(())
+            let xmit_buf = &[msg_type as u8, motor as u8, crc];
+            port.write(xmit_buf)?;
+
+            Ok(())
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "Flight controller not connected",
+            ))
+        }
     }
 
     pub fn send_stop_motor_command(&mut self, motor: RotorPosition) -> Result<(), io::Error> {
-        let msg_type = MsgType::StopMotor;
-        let crc = calc_crc(
-            &CRC_LUT,
-            &[msg_type as u8],
-            msg_type.payload_size() as u8 + 1,
-        );
-        let xmit_buf = &[msg_type as u8, motor as u8, crc];
-        self.ser.write(xmit_buf)?;
+        if let Some(port) = self.serial_port.as_mut() {
+            let msg_type = MsgType::StopMotor;
+            let crc = calc_crc(
+                &CRC_LUT,
+                &[msg_type as u8],
+                msg_type.payload_size() as u8 + 1,
+            );
+            let xmit_buf = &[msg_type as u8, motor as u8, crc];
+            port.write(xmit_buf)?;
 
-        Ok(())
+            Ok(())
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "Flight controller not connected",
+            ))
+        }
     }
 
     pub fn send_set_servo_posit_command(
@@ -405,26 +478,34 @@ impl Fc {
         servo_posit: ServoWingPosition,
         value: f32,
     ) -> Result<(), io::Error> {
-        let msg_type = MsgType::SetServoPosit;
-        let crc = calc_crc(
-            &CRC_LUT,
-            &[msg_type as u8],
-            msg_type.payload_size() as u8 + 1,
-        );
+        if let Some(port) = self.serial_port.as_mut() {
+            let msg_type = MsgType::SetServoPosit;
+            let crc = calc_crc(
+                &CRC_LUT,
+                &[msg_type as u8],
+                msg_type.payload_size() as u8 + 1,
+            );
 
-        let v = value.to_be_bytes();
-        let xmit_buf = &[
-            msg_type as u8,
-            servo_posit as u8,
-            v[0],
-            v[1],
-            v[2],
-            v[3],
-            crc,
-        ];
-        self.ser.write(xmit_buf)?;
+            let v = value.to_be_bytes();
+            let xmit_buf = &[
+                msg_type as u8,
+                servo_posit as u8,
+                v[0],
+                v[1],
+                v[2],
+                v[3],
+                crc,
+            ];
 
-        Ok(())
+            port.write(xmit_buf)?;
+
+            Ok(())
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "Flight controller not connected",
+            ))
+        }
     }
 
     /// Close the serial port
@@ -432,23 +513,9 @@ impl Fc {
 }
 
 fn main() {
-    let fc_ = Fc::new();
+    let fc = Fc::new();
+    let state = State::default();
 
-    unsafe { render::run() };
-
-    let mut state = State::default();
-
-    if let Ok(mut fc) = fc_ {
-        fc.read_all(&mut state);
-
-        thread::sleep(time::Duration::from_millis((READ_INTERVAL * 1_000.) as u64));
-        // fc.send_arm_command();
-
-        fc.close();
-    } else {
-        // Err(io::Error::new(
-        //     io::ErrorKind::Other,
-        //     "Can't find the flight controller.",
-        // ))
-    }
+    // todo: Separate threads for querying FC, and render?
+    render::run(fc, state);
 }

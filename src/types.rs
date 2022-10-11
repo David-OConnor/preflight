@@ -1,19 +1,19 @@
 //! This module contains types etc that are copy+pasted from the firmware.
 
-pub const F32_BYTES: usize = 4;
+pub const F32_SIZE: usize = 4;
 
 pub const CRC_POLY: u8 = 0xab;
 pub const CRC_LUT: [u8; 256] = crc_init(CRC_POLY);
 
-pub const QUATERNION_SIZE: usize = F32_BYTES * 4; // Quaternion (4x4 + altimeter + voltage reading + current reading)
-pub const PARAMS_SIZE: usize = QUATERNION_SIZE + F32_BYTES * 4 + 1; //
+pub const QUATERNION_SIZE: usize = F32_SIZE * 4; // Quaternion (4x4 + altimeter + voltage reading + current reading)
+pub const PARAMS_SIZE: usize = 2 * QUATERNION_SIZE + 4 * F32_SIZE + 1; //
 pub const CONTROLS_SIZE: usize = 18;
 pub const LINK_STATS_SIZE: usize = 5; // Only the first 4 fields.
 
 pub const MAX_WAYPOINTS: usize = 30;
-pub const WAYPOINT_SIZE: usize = F32_BYTES * 3 + WAYPOINT_MAX_NAME_LEN + 1;
+pub const WAYPOINT_SIZE: usize = F32_SIZE * 3 + WAYPOINT_MAX_NAME_LEN + 1;
 pub const WAYPOINTS_SIZE: usize = MAX_WAYPOINTS * WAYPOINT_SIZE;
-pub const SET_SERVO_POSIT_SIZE: usize = 1 + F32_BYTES;
+pub const SET_SERVO_POSIT_SIZE: usize = 1 + F32_SIZE;
 pub const WAYPOINT_MAX_NAME_LEN: usize = 7;
 
 // Packet sizes are payload size + 2. Additional data are message type, and CRC.
@@ -120,41 +120,6 @@ pub struct ChannelData {
     // pub alt_hold: AltHoldSwitch, // todo
     // todo: Auto-recover commanded, auto-TO/land/RTB, obstacle avoidance etc.
 }
-
-// #[derive(Default, Clone)]
-// pub struct Params {
-//     // todo: Do we want to use this full struct, or store multiple (3+) instantaneous ones?
-//     pub s_x: f32,
-//     pub s_y: f32,
-//     // Note that we only need to specify MSL vs AGL for position; velocity and accel should
-//     // be equiv for them.
-//     pub s_z_msl: f32,
-//     pub s_z_agl: f32,
-//
-//     pub s_pitch: f32,
-//     pub s_roll: f32,
-//     pub s_yaw: f32,
-//
-//     pub quaternion: Quaternion,
-//
-//     // Velocity
-//     pub v_x: f32,
-//     pub v_y: f32,
-//     pub v_z: f32,
-//
-//     pub v_pitch: f32,
-//     pub v_roll: f32,
-//     pub v_yaw: f32,
-//
-//     // Acceleration
-//     pub a_x: f32,
-//     pub a_y: f32,
-//     pub a_z: f32,
-//
-//     pub a_pitch: f32,
-//     pub a_roll: f32,
-//     pub a_yaw: f32,
-// }
 
 #[derive(Clone, Copy)]
 #[repr(u8)]
@@ -274,4 +239,32 @@ pub struct Location {
     pub x: f32,
     pub y: f32,
     pub z: f32,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum SensorStatus {
+    Pass,
+    Fail,
+    /// Either an external sensor not plugged in, or a complete failture, werein it's not recognized.
+    NotConnected,
+}
+
+impl Default for SensorStatus {
+    fn default() -> Self {
+        Self::NotConnected
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct SystemStatus {
+    pub imu: SensorStatus,
+    pub baro: SensorStatus,
+    /// The GPS module is connected. Detected on init.
+    pub gps: SensorStatus,
+    /// The time-of-flight sensor module is connected. Detected on init.
+    pub tof: SensorStatus,
+    ///  magnetometer is connected. Likely on the same module as GPS. Detected on init.
+    pub magnetometer: SensorStatus,
+    pub esc_telemetry: SensorStatus,
+    pub esc_rpm: SensorStatus,
 }

@@ -923,12 +923,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libm"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "292a948cd991e376cf75541fe5b97a1081d713c618b4f1b9500f8844e49eb565"
-
-[[package]]
 name = "libudev"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -951,9 +945,6 @@ dependencies = [
 [[package]]
 name = "lin-alg2"
 version = "0.1.0"
-dependencies = [
- "num-traits",
-]
 
 [[package]]
 name = "lock_api"
@@ -1209,7 +1200,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "578ede34cf02f8924ab9447f50c28075b4d3e5b269972345e7e0372b38c6cdcd"
 dependencies = [
  "autocfg",
- "libm",
 ]
 
 [[package]]
