@@ -47,6 +47,11 @@ pub struct State {
     pub current: f32,
     pub lat: Option<f32>,
     pub lon: Option<f32>,
+    // todo: aftleft etc, or 1-4?
+    pub rpm1: Option<f32>,
+    pub rpm2: Option<f32>,
+    pub rpm3: Option<f32>,
+    pub rpm4: Option<f32>,
     pub last_attitude_update: Instant,
     pub last_controls_update: Instant,
     pub last_link_stats_update: Instant,
@@ -79,6 +84,10 @@ impl Default for State {
             current: 0.,
             lat: None,
             lon: None,
+            rpm1: None,
+            rpm2: None,
+            rpm3: None,
+            rpm4: None,
             last_attitude_update: Instant::now(),
             last_controls_update: Instant::now(),
             last_link_stats_update: Instant::now(),
@@ -88,41 +97,6 @@ impl Default for State {
         }
     }
 }
-
-// // todo: temp static mut
-// static mut STATE: State = State {
-//     attitude: Quaternion { w: 0., x: 0., y: 0., z: 0. },
-//     controls: ChannelData {
-//         roll: 0.,
-//         pitch: 0.,
-//         throttle: 0.,
-//         yaw: 0.,
-//         arm_status: ArmStatus::Disarmed,
-//         input_mode: InputModeSwitch::Acro,
-//     },
-//     link_stats: LinkStats {
-//         timestamp: 0,
-//         uplink_rssi_1: 0,
-//         uplink_rssi_2: 0,
-//         uplink_link_quality: 0,
-//         uplink_snr: 0,
-//         active_antenna: 0,
-//         rf_mode: 0,
-//         uplink_tx_power: 0,
-//         downlink_rssi: 0,
-//         downlink_link_quality: 0,
-//         downlink_snr: 0,
-//     },
-//     waypoints: [None; MAX_WAYPOINTS],
-//     altimeter_baro: 0.,
-//     altimeter_agl: None,
-//     batt_v: 0.,
-//     current: 0.,
-//     last_attitude_update: Instant::now(),
-//     last_controls_update: Instant::now(),
-//     last_link_stats_update: Instant::now(),
-//     aircraft_type: AircraftType::Quadcopter,
-// };
 
 /// Convert radians to degrees
 fn to_degrees(v: f32) -> f32 {

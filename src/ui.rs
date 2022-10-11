@@ -5,7 +5,7 @@ use std::f32::consts::TAU;
 use egui;
 
 use crate::{
-    types::{AircraftType, SensorStatus},
+    types::{AircraftType, ArmStatus, SensorStatus},
     State,
 };
 
@@ -74,6 +74,13 @@ fn rad_to_dms(rad: f32, lat_lon: LatLon) -> String {
     format!("{deg_whole}° {mins_whole}' {:.2}\" {n_s}", secs)
 }
 
+fn format_rpm(rpm: Option<f32>) -> String {
+    match rpm {
+        Some(r) => r.to_string(),
+        None => "(no data)".to_owned(),
+    }
+}
+
 pub fn run(state: State) -> Box<dyn Fn(&egui::Context)> {
     Box::new(move |ctx: &egui::Context| {
         let panel = egui::TopBottomPanel::bottom("UI panel"); // ID must be unique among panels.
@@ -97,6 +104,11 @@ pub fn run(state: State) -> Box<dyn Fn(&egui::Context)> {
 
         // todo: For formatting, try RichText, ie
         // todo: ui.heading(RichText::new("AnyLeaf Preflight").size(10.));
+
+        let arm_status = match state.controls.arm_status {
+            ArmStatus::Disarmed => "Disarmed",
+            ArmStatus::Armed => "Armed",
+        };
 
         panel.show(ctx, |ui| {
             ui.spacing_mut().item_spacing = egui::vec2(ITEM_SPACING_X, ITEM_SPACING_Y);
@@ -200,6 +212,12 @@ pub fn run(state: State) -> Box<dyn Fn(&egui::Context)> {
                     ui.label("Throttle");
                     ui.label(&state.controls.throttle.to_string());
                 });
+                ui.vertical(|ui| {
+                    ui.label("Motor arm status");
+                    ui.label(arm_status);
+                });
+
+                // todo: Input mode switch etc.
             });
 
             ui.add_space(SPACE_BETWEEN_SECTIONS);
@@ -255,6 +273,26 @@ pub fn run(state: State) -> Box<dyn Fn(&egui::Context)> {
             ui.add_space(SPACE_BETWEEN_SECTIONS);
 
             ui.heading("Motor power settings and RPM");
+
+            // todo: Motors 1-4 vs positions?
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label("Motor 1 RPM");
+                    ui.label(&format_rpm(state.rpm1));
+                });
+                ui.vertical(|ui| {
+                    ui.label("Motor 2 RPM");
+                    ui.label(&format_rpm(state.rpm2));
+                });
+                ui.vertical(|ui| {
+                    ui.label("Motor 3 RPM");
+                    ui.label(&format_rpm(state.rpm3));
+                });
+                ui.vertical(|ui| {
+                    ui.label("Motor 4 RPM");
+                    ui.label(&format_rpm(state.rpm3));
+                });
+            });
 
             ui.add_space(SPACE_BETWEEN_SECTIONS);
 
