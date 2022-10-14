@@ -52,6 +52,7 @@ pub struct State {
     pub rpm2: Option<f32>,
     pub rpm3: Option<f32>,
     pub rpm4: Option<f32>,
+    pub autopilot_status: AutopilotStatus,
     pub last_attitude_update: Instant,
     pub last_controls_update: Instant,
     pub last_link_stats_update: Instant,
@@ -88,6 +89,7 @@ impl Default for State {
             rpm2: None,
             rpm3: None,
             rpm4: None,
+            autopilot_status: Default::default(),
             last_attitude_update: Instant::now(),
             last_controls_update: Instant::now(),
             last_link_stats_update: Instant::now(),
@@ -144,6 +146,20 @@ impl From<[u8; LINK_STATS_SIZE]> for LinkStats {
     }
 }
 
+impl From<[u8; SYS_STATUS_SIZE]> for SystemStatus {
+    fn from(p: [u8; SYS_STATUS_SIZE]) -> Self {
+        SystemStatus {
+            imu: p[0].try_into().unwrap(),
+            baro: p[0].try_into().unwrap(),
+            gps: p[0].try_into().unwrap(),
+            tof: p[0].try_into().unwrap(),
+            magnetometer: p[0].try_into().unwrap(),
+            esc_telemetry: p[0].try_into().unwrap(),
+            esc_rpm: p[0].try_into().unwrap(),
+        }
+    }
+}
+
 // impl From<[u8; WAYPOINTS_SIZE]> for [Option<Location>; MAX_WAYPOINTS] {
 /// Standalone fn instead of impl due to a Rust restriction.
 fn waypoints_from_buf(w: [u8; WAYPOINTS_SIZE]) -> [Option<Location>; MAX_WAYPOINTS] {
@@ -195,6 +211,7 @@ pub fn bytes_to_float(bytes: &[u8]) -> f32 {
     let bytes: [u8; 4] = bytes.try_into().unwrap();
     f32::from_bits(u32::from_be_bytes(bytes))
 }
+
 
 /// This mirrors that in the Python driver
 pub struct Fc {
@@ -300,8 +317,6 @@ impl Fc {
         let mut rx_buf = [0; CONTROLS_SIZE + 2];
         port.read(&mut rx_buf)?;
 
-        thread::sleep(time::Duration::from_millis(5)); // todo TS
-
         let controls: [u8; CONTROLS_SIZE] = rx_buf[1..CONTROLS_SIZE + 1].try_into().unwrap();
         state.controls = controls.into();
 
@@ -317,8 +332,6 @@ impl Fc {
 
         let mut rx_buf = [0; LINK_STATS_SIZE + 2];
         port.read(&mut rx_buf)?;
-
-        thread::sleep(time::Duration::from_millis(5)); // todo TS
 
         let link_stats: [u8; LINK_STATS_SIZE] = rx_buf[1..LINK_STATS_SIZE + 1].try_into().unwrap();
 
@@ -336,12 +349,8 @@ impl Fc {
         let mut rx_buf = [0; WAYPOINTS_SIZE + 2];
         port.read(&mut rx_buf)?;
 
-        thread::sleep(time::Duration::from_millis(5)); // todo TS
-
         let mut wp_buf = [0; WAYPOINTS_SIZE];
         wp_buf.clone_from_slice(&rx_buf[1..WAYPOINTS_SIZE + 1]);
-
-        println!("WP BUF: {:?}", wp_buf);
 
         let waypoints_data = waypoints_from_buf(wp_buf);
 

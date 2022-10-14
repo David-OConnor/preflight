@@ -3,7 +3,7 @@
 use std::{boxed::Box, time::Instant};
 
 use graphics::{
-    self, DeviceEvent, Entity, InputSettings, LightType, Lighting, Mesh, PointLight, Scene,
+    self, DeviceEvent, Camera, Entity, InputSettings, LightType, Lighting, Mesh, PointLight, Scene,
     UiSettings,
 };
 
@@ -32,10 +32,10 @@ fn event_handler(
 /// The entry point for our renderer.
 pub fn run(mut fc: Fc, mut state: State) {
     let entities = vec![
-        // Aircraft estimated atoms.
+        // Aircraft estimated attitude
         Entity::new(
             0,
-            Vec3::new(-4., 4., 10.),
+            Vec3::new(-4., 9., 0.),
             Quaternion::new_identity(),
             1.,
             (1., 0., 1.),
@@ -43,8 +43,8 @@ pub fn run(mut fc: Fc, mut state: State) {
         ),
         // Commanded attitutde
         Entity::new(
-            1,
-            Vec3::new(4., 4., 10.),
+            0,
+            Vec3::new(4., 9., 0.),
             Quaternion::new_identity(),
             1.,
             (1., 0., 1.),
@@ -52,15 +52,20 @@ pub fn run(mut fc: Fc, mut state: State) {
         ),
     ];
 
+    // todo: Engine-side, you need to set it up so the window is centered
+    // todo: on the visible part; not overlayed over.
+
     let scene = Scene {
-        meshes: vec![Mesh::new_box(1., 1., 1.), Mesh::new_box(1., 1., 1.)],
+        // todo: Change these meshes A/R.
+        meshes: vec![Mesh::new_box(1., 1., 1.), Mesh::new_sphere(1., 50, 50)],
         entities,
         lighting: Lighting {
             ambient_color: [1., 1., 0., 0.5],
             ambient_intensity: 0.15,
             point_lights: vec![PointLight {
                 type_: LightType::Omnidirectional,
-                position: Vec3::new(0., 20., 0.),
+                position: Vec3::new(0., 9., 0.),
+                // position: Vec3::new(1000., 0., 0.),
                 diffuse_color: [1., 1., 1., 0.5],
                 specular_color: [1., 1., 1., 0.5],
                 diffuse_intensity: 1_000_000.,
@@ -70,6 +75,10 @@ pub fn run(mut fc: Fc, mut state: State) {
         background_color: render::BACKGROUND_COLOR,
         window_size: (WINDOW_WIDTH, WINDOW_HEIGHT),
         window_title: WINDOW_TITLE.to_owned(),
+        camera: Camera {
+            position: Vec3::new(0., 0., -20.),
+            ..Default::default()
+        },
         ..Default::default()
     };
 

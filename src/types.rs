@@ -15,12 +15,16 @@ pub const WAYPOINT_SIZE: usize = F32_SIZE * 3 + WAYPOINT_MAX_NAME_LEN + 1;
 pub const WAYPOINTS_SIZE: usize = MAX_WAYPOINTS * WAYPOINT_SIZE;
 pub const SET_SERVO_POSIT_SIZE: usize = 1 + F32_SIZE;
 pub const WAYPOINT_MAX_NAME_LEN: usize = 7;
+pub const SYS_STATUS_SIZE: usize = 7; // Sensor status (u8) * 7
+pub const AP_STATUS_SIZE: usize = 0; // todo
+pub const SYS_AP_STATUS_SIZE: usize = SYS_STATUS_SIZE + AP_STATUS_SIZE;
 
 // Packet sizes are payload size + 2. Additional data are message type, and CRC.
 pub const PARAMS_PACKET_SIZE: usize = PARAMS_SIZE + 2;
 pub const CONTROLS_PACKET_SIZE: usize = CONTROLS_SIZE + 2;
 pub const LINK_STATS_PACKET_SIZE: usize = LINK_STATS_SIZE + 2;
 pub const WAYPOINTS_PACKET_SIZE: usize = WAYPOINTS_SIZE + 2;
+pub const SYS_AP_STATUS_PACKET_SIZE: usize = SYS_AP_STATUS_SIZE + 2;
 
 pub struct DecodeError {}
 
@@ -80,6 +84,8 @@ pub enum MsgType {
     Updatewaypoints = 13,
     Waypoints = 14,
     SetServoPosit = 15,
+    ReqSysApStatus = 16,
+    SysApStatus = 17,
 }
 
 impl MsgType {
@@ -101,6 +107,8 @@ impl MsgType {
             Self::Updatewaypoints => 10, // todo?
             Self::Waypoints => WAYPOINTS_SIZE,
             Self::SetServoPosit => SET_SERVO_POSIT_SIZE,
+            Self::ReqSysApStatus => 0,
+            Self::SysApStatus => SYS_AP_STATUS_SIZE,
         }
     }
 }
@@ -241,12 +249,13 @@ pub struct Location {
     pub z: f32,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, TryFromPrimitive)]
+#[repr(u8)] // for USB ser
 pub enum SensorStatus {
-    Pass,
-    Fail,
+    Pass = 0,
+    Fail = 1,
     /// Either an external sensor not plugged in, or a complete failture, werein it's not recognized.
-    NotConnected,
+    NotConnected = 2,
 }
 
 impl Default for SensorStatus {
@@ -267,4 +276,113 @@ pub struct SystemStatus {
     pub magnetometer: SensorStatus,
     pub esc_telemetry: SensorStatus,
     pub esc_rpm: SensorStatus,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum AltType {
+    /// Above ground level (eg from a TOF sensor)
+    Agl,
+    /// Mean sea level (eg from GPS or baro)
+    Msl,
+}
+
+#[repr(u8)] // for USB serialization
+#[derive(Clone, Copy)]
+pub enum YawAssist {
+    Disabled = 0,
+    YawAssist = 1,
+    /// Automatically adjust roll (rate? angle?) to zero out slip, ie based on rudder inputs.
+    RollAssist = 2,
+}
+
+impl Default for YawAssist {
+    fn default() -> Self {
+        Self::Disabled
+    }
+}
+
+/// Categories of control mode, in regards to which parameters are held fixed.
+/// Note that some settings are mutually exclusive.
+#[derive(Clone, Default)]
+pub struct AutopilotStatus {
+    /// Altitude is fixed. (MSL or AGL)
+    pub alt_hold: Option<(AltType, f32)>,
+    /// Heading is fixed.
+    pub hdg_hold: Option<f32>,
+    pub yaw_assist: YawAssist,
+    pub velocity_vector: Option<(f32, f32)>, // pitch, yaw
+    /// Fly direct to a point
+    pub direct_to_point: Option<Location>,
+    /// The aircraft will fly a fixed profile between sequence points
+    pub sequence: bool,
+    /// Terrain following mode. Similar to TF radar in a jet. Require a forward-pointing sensor.
+    /// todo: Add a forward (or angled) TOF sensor, identical to the downward-facing one?
+    pub terrain_following: Option<f32>, // AGL to hold
+    /// Take off automatically
+    pub takeoff: bool, // todo: takeoff cfg struct[s].
+    /// Land automatically
+    pub land: Option<LandingCfg>,
+    /// Recover to stable, altitude-holding flight. Generally initiated by a "panic button"-style
+    /// switch activation
+    pub recover: Option<f32>, // value is MSL alt to hold, eg our alt at time of command.
+    // #[cfg(feature = "quad")]
+    /// Maintain a geographic position and altitude
+    pub loiter: Option<Location>,
+    // #[cfg(feature = "fixed-wing")]
+    /// Orbit over a point on the ground
+    pub orbit: Option<Orbit>,
+}
+
+// #[cfg(feature = "fixed-wing")]
+#[derive(Clone, Default)]
+pub struct LandingCfg {
+    /// Radians magnetic.
+    pub heading: f32,
+    /// radians, down from level
+    pub glideslope: f32,
+    /// Touchdown location, ideally with GPS (requirement?)
+    pub touchdown_point: Location,
+    /// Groundspeed in m/s
+    /// todo: Remove ground_speed in favor of AOA once you figure out how to measure AOA.
+    pub ground_speed: f32,
+    /// Angle of attack in radians
+    /// todo: Include AOA later once you figure out how to measure it.
+    pub angle_of_attack: f32,
+    /// Altitude to start the flare in AGL. Requires TOF sensor or similar.
+    pub flare_alt_agl: f32,
+    /// Minimum ground track distance in meters the craft must fly while aligned on the heading
+    pub min_ground_track: f32,
+    // quad below; fixed-wing above (touchdown pt is both)
+    pub descent_starting_alt_msl: f32, // altitude to start the descent in QFE msl.
+    pub descent_speed: f32,            // m/s
+}
+
+// fixed-wing only
+#[derive(Clone)]
+pub struct Orbit {
+    pub shape: OrbitShape,
+    pub center_lat: f32,   // radians
+    pub center_lon: f32,   // radians
+    pub radius: f32,       // m
+    pub ground_speed: f32, // m/s
+    pub direction: OrbitDirection,
+}
+
+#[derive(Clone, Copy)]
+pub enum OrbitDirection {
+    Clockwise,
+    CounterClockwise,
+}
+
+#[cfg(feature = "fixed-wing")]
+impl Default for OrbitDirection {
+    fn default() -> Self {
+        OrbitDirection::Clockwise
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum OrbitShape {
+    Circular,
+    Racetrack,
 }

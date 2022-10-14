@@ -5,7 +5,7 @@ use std::f32::consts::TAU;
 use egui;
 
 use crate::{
-    types::{AircraftType, ArmStatus, SensorStatus},
+    types::{AltType, AircraftType, ArmStatus, SensorStatus, YawAssist},
     State,
 };
 
@@ -81,12 +81,16 @@ fn format_rpm(rpm: Option<f32>) -> String {
     }
 }
 
-pub fn run(state: State) -> Box<dyn Fn(&egui::Context)> {
+fn format_ap_bool(v: bool) -> String {
+    if v {
+        "Enabled".to_owned()
+    } else {
+        "Off".to_owned()
+    }
+}
+
+pub fn run(state: State) -> Box<dyn FnMut(&egui::Context)> {
     Box::new(move |ctx: &egui::Context| {
-        let panel = egui::TopBottomPanel::bottom("UI panel"); // ID must be unique among panels.
-
-        // .default_width(UI_PANEL_SIZE);
-
         let agl = match &state.altitude_agl {
             Some(a) => a.to_string() + " M",
             None => "(Not connected)".to_owned(), // todo: Currently doesn't show
@@ -110,7 +114,33 @@ pub fn run(state: State) -> Box<dyn Fn(&egui::Context)> {
             ArmStatus::Armed => "Armed",
         };
 
+        let alt_hold = match state.autopilot_status.alt_hold {
+            Some((alt_type, val)) => {
+                let type_lbl = match alt_type {
+                    AltType::Msl => "MSL",
+                    AltType::Agl => "AGL",
+                };
+                format!("{}m {type_lbl}", val as u16)
+            }
+            None => "Off".to_owned()
+        };
+
+        let hdg_hold = match state.autopilot_status.alt_hold {
+            Some((alt_type, val)) =>  format!("{}°", val * 360./TAU),
+            None => "Off".to_owned(),
+        };
+
+        let yaw_assist = match state.autopilot_status.yaw_assist {
+            YawAssist::Disabled => "Off",
+            YawAssist::YawAssist => "Auto yaw",
+            YawAssist::RollAssist=> "Auto roll",
+        };
+
+        let panel = egui::TopBottomPanel::bottom("UI panel"); // ID must be unique among panels.
+
         panel.show(ctx, |ui| {
+            // ui.vscroll(true);
+
             ui.spacing_mut().item_spacing = egui::vec2(ITEM_SPACING_X, ITEM_SPACING_Y);
 
             ui.heading("AnyLeaf Preflight");
@@ -148,77 +178,84 @@ pub fn run(state: State) -> Box<dyn Fn(&egui::Context)> {
                 });
             });
 
-            ui.heading("Sensors");
-
-            // todo: Center these.
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.label("Altitude baro:");
-                    ui.label(&(state.altitude_baro.to_string() + " m"));
-                });
-
-                if state.altitude_agl.is_some() {
-                    ui.vertical(|ui| {
-                        ui.label("Altitude AGL:");
-                        ui.label(agl);
-                    });
-                }
-
-                ui.vertical(|ui| {
-                    ui.label("Battery V:");
-                    ui.label(&state.batt_v.to_string());
-                });
-
-                ui.vertical(|ui| {
-                    ui.label("ESC current (A):");
-                    ui.label(&state.current.to_string());
-                });
-
-                if state.lat.is_some() && state.lon.is_some() {
-                    // todo: Separate PPKS section A/r
-                    ui.vertical(|ui| {
-                        ui.label("Latitude:");
-                        ui.label(lat);
-                    });
-
-                    ui.vertical(|ui| {
-                        ui.label("Longitude:");
-                        ui.label(lon);
-                    });
-                } else {
-                    // ui.label("GNSS not connected)");
-                    // ui.label(""); // Spacer
-                }
-            });
-
             ui.add_space(SPACE_BETWEEN_SECTIONS);
 
-            ui.heading("Control commands:");
-
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
-                    ui.label("Pitch");
-                    ui.label(&state.controls.pitch.to_string());
-                });
-                ui.vertical(|ui| {
-                    ui.label("Roll");
-                    ui.label(&state.controls.roll.to_string());
-                });
-                ui.vertical(|ui| {
-                    ui.label("Yaw");
-                    ui.label(&state.controls.yaw.to_string());
-                });
-                ui.vertical(|ui| {
-                    ui.label("Throttle");
-                    ui.label(&state.controls.throttle.to_string());
-                });
-                ui.vertical(|ui| {
-                    ui.label("Motor arm status");
-                    ui.label(arm_status);
+                    ui.heading("Sensors");
+
+                    ui.horizontal(|ui| {
+                        // todo: Center these.
+                        ui.vertical(|ui| {
+                            ui.label("Altitude baro:");
+                            ui.label(&(state.altitude_baro.to_string() + " m"));
+                        });
+
+                        if state.altitude_agl.is_some() {
+                            ui.vertical(|ui| {
+                                ui.label("Altitude AGL:");
+                                ui.label(&agl);
+                            });
+                        }
+
+                        ui.vertical(|ui| {
+                            ui.label("Battery V:");
+                            ui.label(&state.batt_v.to_string());
+                        });
+
+                        ui.vertical(|ui| {
+                            ui.label("ESC current (A):");
+                            ui.label(&state.current.to_string());
+                        });
+
+                        if state.lat.is_some() && state.lon.is_some() {
+                            // todo: Separate PPKS section A/r
+                            ui.vertical(|ui| {
+                                ui.label("Latitude:");
+                                ui.label(lat);
+                            });
+
+                            ui.vertical(|ui| {
+                                ui.label("Longitude:");
+                                ui.label(lon);
+                            });
+                        } else {
+                            // ui.label("GNSS not connected)");
+                            // ui.label(""); // Spacer
+                        }
+                    });
                 });
 
-                // todo: Input mode switch etc.
+                ui.add_space(80.);
+
+                ui.vertical(|ui| {
+                    ui.heading("Control commands");
+                    ui.horizontal(|ui| {
+                        ui.vertical(|ui| {
+                            ui.label("Pitch");
+                            ui.label(&state.controls.pitch.to_string());
+                        });
+                        ui.vertical(|ui| {
+                            ui.label("Roll");
+                            ui.label(&state.controls.roll.to_string());
+                        });
+                        ui.vertical(|ui| {
+                            ui.label("Yaw");
+                            ui.label(&state.controls.yaw.to_string());
+                        });
+                        ui.vertical(|ui| {
+                            ui.label("Throttle");
+                            ui.label(&state.controls.throttle.to_string());
+                        });
+                        ui.vertical(|ui| {
+                            ui.label("Motor arm status");
+                            ui.label(arm_status);
+                        });
+                    });
+                });
             });
+
+            // todo: Input mode switch etc.
 
             ui.add_space(SPACE_BETWEEN_SECTIONS);
 
@@ -267,6 +304,27 @@ pub fn run(state: State) -> Box<dyn Fn(&egui::Context)> {
                 ui.vertical(|ui| {
                     ui.label("Downlink SNR");
                     ui.label(&state.link_stats.downlink_snr.to_string());
+                });
+            });
+
+            ui.add_space(SPACE_BETWEEN_SECTIONS);
+
+            ui.heading("Autopilot status");
+
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label("Alt hold");
+                    ui.label(&alt_hold);
+                });
+                ui.vertical(|ui| {
+                    ui.label("Heading hold");
+                    ui.label(&hdg_hold);
+                });
+                // todo: When you put yaw and/or roll assist back, you probably
+                // todo want one field for it.
+                ui.vertical(|ui| {
+                    ui.label("Yaw assist");
+                    ui.label(yaw_assist);
                 });
             });
 
