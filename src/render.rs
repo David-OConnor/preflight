@@ -1,10 +1,14 @@
 //! This module contains code related to the 3D render (Aircraft attitude depiction etc)
 
-use std::{sync::atomic::{AtomicUsize, Ordering}, boxed::Box, time::Instant};
+use std::{
+    boxed::Box,
+    sync::atomic::{AtomicUsize, Ordering},
+    time::Instant,
+};
 
 use graphics::{
-    self, Camera, DeviceEvent, Entity, InputSettings, LightType, Lighting, Mesh, PointLight, Scene,
-    UiSettings, EngineUpdates
+    self, Camera, DeviceEvent, EngineUpdates, Entity, InputSettings, LightType, Lighting, Mesh,
+    PointLight, Scene, UiSettings,
 };
 
 use lin_alg2::{

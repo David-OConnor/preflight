@@ -11,10 +11,10 @@ use std::{
     f32::consts::TAU,
     io::{self, Read},
     thread,
-    time::{self, Instant, Duration},
+    time::{self, Duration, Instant},
 };
 
-use serialport::{self, SerialPortType, SerialPort};
+use serialport::{self, SerialPort, SerialPortType};
 
 use lin_alg2::f32::Quaternion;
 use types::*;
@@ -28,8 +28,6 @@ const FC_SERIAL_NUMBER: &str = "AN";
 const BAUD: u32 = 115_200;
 
 const TIMEOUT_MILIS: u64 = 10;
-
-
 
 // At this interval, in seconds, request new data from the FC.
 // todo: Do you want some (or all?) of the read data to be pushed at a regular
@@ -214,7 +212,8 @@ impl State {
         let mut rx_buf = [0; SYS_AP_STATUS_SIZE + 2];
         port.read_exact(&mut rx_buf)?;
 
-        let sys_status: [u8; SYS_AP_STATUS_SIZE] = rx_buf[1..SYS_AP_STATUS_SIZE + 1].try_into().unwrap();
+        let sys_status: [u8; SYS_AP_STATUS_SIZE] =
+            rx_buf[1..SYS_AP_STATUS_SIZE + 1].try_into().unwrap();
         self.system_status = sys_status.into();
 
         Ok(())
@@ -233,7 +232,6 @@ impl State {
                 ))
             }
         };
-
 
         let crc_tx = calc_crc(
             &CRC_LUT,
@@ -349,7 +347,6 @@ impl State {
         self.read_controls()?;
         self.read_link_stats()?;
         self.read_waypoints()?;
-
 
         Ok(())
     }
@@ -606,10 +603,13 @@ impl SerialInterface {
                         if sn == FC_SERIAL_NUMBER {
                             match serialport::new(&port_info.port_name, BAUD)
                                 .timeout(Duration::from_millis(TIMEOUT_MILIS))
-                                .open() {
+                                .open()
+                            {
                                 // }
                                 Ok(port) => {
-                                    return Self { serial_port: Some(port) };
+                                    return Self {
+                                        serial_port: Some(port),
+                                    };
                                 }
                                 Err(serialport::Error { kind, description }) => {
                                     match kind {
@@ -620,8 +620,11 @@ impl SerialInterface {
                                             println!("No device: {:?}", description);
                                         }
                                         _ => {
-                                            println!("Error opening the port: {:?} - {:?}", kind, description);
-                                        },
+                                            println!(
+                                                "Error opening the port: {:?} - {:?}",
+                                                kind, description
+                                            );
+                                        }
                                     }
                                 }
                             }

@@ -16,14 +16,16 @@ use crate::{
 const ITEM_SPACING_X: f32 = 10.;
 const ITEM_SPACING_Y: f32 = 12.;
 const SPACE_BETWEEN_SECTIONS: f32 = 30.;
+const SPACING_HORIZONTAL: f32 = 26.;
+const SPACING_HORIZONTAL_TIGHT: f32 = 16.;
 
 impl SensorStatus {
     // Note Not included in Corvus
-    fn to_string(&self) -> String {
+    fn to_str(&self) -> &str {
         match self {
-            Self::Pass => "Pass".to_owned(),
-            Self::Fail => "Failure".to_owned(),
-            Self::NotConnected => "Not connected".to_owned(),
+            Self::Pass => "Pass",
+            Self::Fail => "Failure",
+            Self::NotConnected => "Not connected",
         }
     }
 
@@ -31,7 +33,24 @@ impl SensorStatus {
         match self {
             Self::Pass => Color32::LIGHT_GREEN,
             Self::Fail => Color32::LIGHT_RED,
-            Self::NotConnected => Color32::GRAY,
+            Self::NotConnected => Color32::GOLD,
+        }
+    }
+}
+
+// todo: Fixed wing arm status as well
+impl ArmStatus {
+    fn to_str(&self) -> &str {
+        match self {
+            Self::Armed => "Armed",
+            Self::Disarmed => "Disarmed",
+        }
+    }
+
+    fn to_color(&self) -> Color32 {
+        match self {
+            Self::Armed => Color32::YELLOW,
+            Self::Disarmed => Color32::GREEN,
         }
     }
 }
@@ -99,6 +118,15 @@ fn format_ap_bool(v: bool) -> String {
     }
 }
 
+/// Add a sensor status indicator.
+fn add_sensor_status(label: &str, val: SensorStatus, ui: &mut egui::Ui) {
+    ui.vertical(|ui| {
+        ui.label(label);
+        ui.label(RichText::new(val.to_str()).color(val.to_color()));
+    });
+    ui.add_space(SPACING_HORIZONTAL);
+}
+
 pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineUpdates {
     // pub fn run() -> impl FnMut(&egui::Context) {
     //     move |state: &mut State, ctx: &egui::Context| {
@@ -119,11 +147,6 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
     // todo: For formatting, try RichText, ie
     // todo: ui.heading(RichText::new("AnyLeaf Preflight").size(10.));
-
-    let arm_status = match state.controls.arm_status {
-        ArmStatus::Disarmed => "Disarmed",
-        ArmStatus::Armed => "Armed",
-    };
 
     let alt_hold = match state.autopilot_status.alt_hold {
         Some((alt_type, val)) => {
@@ -159,41 +182,13 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
         ui.heading("System status"); // todo: Get this from FC; update on both sides.
 
         ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.label("IMU:");
-                let v = &state.system_status.imu;
-                ui.label(RichText::new(v.to_string()).color(v.to_color()));
-            });
-            ui.vertical(|ui| {
-                ui.label("Baro altimeter:");
-                let v = &state.system_status.baro;
-                ui.label(RichText::new(v.to_string()).color(v.to_color()));
-            });
-            ui.vertical(|ui| {
-                ui.label("AGL altimeter");
-                let v = &state.system_status.tof;
-                ui.label(RichText::new(v.to_string()).color(v.to_color()));
-            });
-            ui.vertical(|ui| {
-                ui.label("GNSS (ie GPS):");
-                let v = &state.system_status.gps;
-                ui.label(RichText::new(v.to_string()).color(v.to_color()));
-            });
-            ui.vertical(|ui| {
-                ui.label("Magnetometer:");
-                let v = &state.system_status.imu;
-                ui.label(RichText::new(v.to_string()).color(v.to_color()));
-            });
-            // ui.vertical(|ui| {
-            //     ui.label("ESC telemetry:");
-            // let v = &state.system_status.esc_telemetry;
-            //     ui.label(RichText::new(v.to_string()).color(v.to_color()));
-            // });
-            ui.vertical(|ui| {
-                ui.label("RPM sensor");
-                let v = &state.system_status.esc_rpm;
-                ui.label(RichText::new(v.to_string()).color(v.to_color()));
-            });
+            add_sensor_status("IMU: ", state.system_status.imu, ui);
+            add_sensor_status("RPM readings: ", state.system_status.esc_rpm, ui);
+            add_sensor_status("Baro altimeter: ", state.system_status.baro, ui);
+            add_sensor_status("AGL altimeter: ", state.system_status.tof, ui);
+            add_sensor_status("GNSS (ie GPS): ", state.system_status.gps, ui);
+            add_sensor_status("Magnetometer: ", state.system_status.magnetometer, ui);
+            // add_sensor_status("ESC telemetry: ", state.system_status.esc_telemetry, ui);
         });
 
         ui.add_space(SPACE_BETWEEN_SECTIONS);
@@ -251,23 +246,34 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.label("Pitch");
-                        ui.label(&state.controls.pitch.to_string());
+                        ui.label(format!("{:.2}", &state.controls.pitch));
                     });
+                    ui.add_space(SPACING_HORIZONTAL);
+
                     ui.vertical(|ui| {
                         ui.label("Roll");
-                        ui.label(&state.controls.roll.to_string());
+                        ui.label(format!("{:.2}", &state.controls.roll));
                     });
+                    ui.add_space(SPACING_HORIZONTAL);
+
                     ui.vertical(|ui| {
                         ui.label("Yaw");
-                        ui.label(&state.controls.yaw.to_string());
+                        ui.label(format!("{:.2}", &state.controls.yaw));
                     });
+                    ui.add_space(SPACING_HORIZONTAL);
+
                     ui.vertical(|ui| {
                         ui.label("Throttle");
-                        ui.label(&state.controls.throttle.to_string());
+                        ui.label(format!("{:.2}", &state.controls.throttle));
                     });
+                    ui.add_space(SPACING_HORIZONTAL);
+
+                    // todo Important: This isn't the actual arm status state! It's the control input!
+                    // todo: Potentially misleading.
                     ui.vertical(|ui| {
-                        ui.label("Motor arm status");
-                        ui.label(arm_status);
+                        ui.label("Motor arm switch");
+                        let val = state.controls.arm_status;
+                        ui.label(RichText::new(val.to_str()).color(val.to_color()));
                     });
                 });
             });
@@ -287,38 +293,56 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                 ui.label("Uplink RSSI 1");
                 ui.label(&state.link_stats.uplink_rssi_1.to_string());
             });
+            ui.add_space(SPACING_HORIZONTAL_TIGHT);
+
             // ui.vertical(|ui| {
             //     ui.label("Uplink RSSI 2");
             //     ui.label(&state.link_stats.uplink_rssi_2.to_string());
             // });
+            // ui.add_space(SPACING_HORIZONTAL_TIGHT);
+
             ui.vertical(|ui| {
-                ui.label("Link Quality");
+                ui.label("Link qual");
                 ui.label(&state.link_stats.uplink_link_quality.to_string());
             });
+            ui.add_space(SPACING_HORIZONTAL_TIGHT);
+
             ui.vertical(|ui| {
                 ui.label("Uplink SNR");
                 ui.label(&state.link_stats.uplink_snr.to_string());
             });
+            ui.add_space(SPACING_HORIZONTAL_TIGHT);
+
             // ui.vertical(|ui| {
             //     ui.label("Active antenna");
             //     ui.label(&state.link_stats.active_antenna.to_string());
             // });
+            // ui.add_space(SPACING_HORIZONTAL_TIGHT);
+
             ui.vertical(|ui| {
                 ui.label("RF mode");
                 ui.label(&state.link_stats.rf_mode.to_string());
             });
+            ui.add_space(SPACING_HORIZONTAL);
+
             ui.vertical(|ui| {
-                ui.label("Uplink Tx power");
+                ui.label("Uplink Tx pwr");
                 ui.label(&tx_pwr_from_val(state.link_stats.uplink_tx_power));
             });
+            ui.add_space(SPACING_HORIZONTAL_TIGHT);
+
             ui.vertical(|ui| {
                 ui.label("Downlink RSSI");
                 ui.label(&state.link_stats.downlink_rssi.to_string());
             });
+            ui.add_space(SPACING_HORIZONTAL_TIGHT);
+
             ui.vertical(|ui| {
-                ui.label("Downlink link quality");
+                ui.label("Downlink link qual");
                 ui.label(&state.link_stats.downlink_link_quality.to_string());
             });
+            ui.add_space(SPACING_HORIZONTAL_TIGHT);
+
             ui.vertical(|ui| {
                 ui.label("Downlink SNR");
                 ui.label(&state.link_stats.downlink_snr.to_string());
