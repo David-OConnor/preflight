@@ -2,6 +2,8 @@
 
 use std::f32::consts::TAU;
 
+use egui::{self, Color32, RichText};
+
 use graphics::{EngineUpdates, Scene};
 
 use crate::{
@@ -19,9 +21,17 @@ impl SensorStatus {
     // Note Not included in Corvus
     fn to_string(&self) -> String {
         match self {
-            Self::Pass => "✓".to_owned(),
+            Self::Pass => "Pass".to_owned(),
             Self::Fail => "Failure".to_owned(),
             Self::NotConnected => "Not connected".to_owned(),
+        }
+    }
+
+    fn to_color(&self) -> Color32 {
+        match self {
+            Self::Pass => Color32::LIGHT_GREEN,
+            Self::Fail => Color32::LIGHT_RED,
+            Self::NotConnected => Color32::GRAY,
         }
     }
 }
@@ -151,31 +161,38 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.label("IMU:");
-                ui.label(&state.system_status.imu.to_string());
+                let v = &state.system_status.imu;
+                ui.label(RichText::new(v.to_string()).color(v.to_color()));
             });
             ui.vertical(|ui| {
                 ui.label("Baro altimeter:");
-                ui.label(&state.system_status.baro.to_string());
+                let v = &state.system_status.baro;
+                ui.label(RichText::new(v.to_string()).color(v.to_color()));
             });
             ui.vertical(|ui| {
                 ui.label("AGL altimeter");
-                ui.label(&state.system_status.tof.to_string());
+                let v = &state.system_status.tof;
+                ui.label(RichText::new(v.to_string()).color(v.to_color()));
             });
             ui.vertical(|ui| {
                 ui.label("GNSS (ie GPS):");
-                ui.label(&state.system_status.gps.to_string());
+                let v = &state.system_status.gps;
+                ui.label(RichText::new(v.to_string()).color(v.to_color()));
             });
             ui.vertical(|ui| {
                 ui.label("Magnetometer:");
-                ui.label(&state.system_status.magnetometer.to_string());
+                let v = &state.system_status.imu;
+                ui.label(RichText::new(v.to_string()).color(v.to_color()));
             });
             // ui.vertical(|ui| {
             //     ui.label("ESC telemetry:");
-            //     ui.label(&state.system_status.esc_telemetryu.to_string());
+            // let v = &state.system_status.esc_telemetry;
+            //     ui.label(RichText::new(v.to_string()).color(v.to_color()));
             // });
             ui.vertical(|ui| {
                 ui.label("RPM sensor");
-                ui.label(&state.system_status.esc_rpm.to_string());
+                let v = &state.system_status.esc_rpm;
+                ui.label(RichText::new(v.to_string()).color(v.to_color()));
             });
         });
 

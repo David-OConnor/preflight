@@ -1,6 +1,6 @@
 //! This module contains code related to the 3D render (Aircraft attitude depiction etc)
 
-use std::{boxed::Box, time::Instant};
+use std::{sync::atomic::{AtomicUsize, Ordering}, boxed::Box, time::Instant};
 
 use graphics::{
     self, Camera, DeviceEvent, Entity, InputSettings, LightType, Lighting, Mesh, PointLight, Scene,
@@ -26,19 +26,22 @@ fn render_handler(state: &mut State, scene: &mut Scene, dt: f32) -> EngineUpdate
     // move |state: &mut State, scene: &mut Scene| {
     let mut engine_updates = EngineUpdates::default();
 
-    if state.interface.serial_port.is_some()
-        && state.last_fc_query.elapsed().as_millis() > READ_INTERVAL_MS
-    {
-        state.read_all().unwrap();
+    if state.last_fc_query.elapsed().as_millis() > READ_INTERVAL_MS {
+        // todo: Troubleshooting acces is denied error.
+        state.interface = SerialInterface::new();
 
-        scene.entities[0].orientation = state.attitude;
+        if state.interface.serial_port.is_some() {
+            // state.read_all().unwrap();
+            state.read_all().ok(); // todo temp!
 
-        scene.entities[1].orientation = state.attitude_commanded;
-        state.last_fc_query = Instant::now();
+            scene.entities[0].orientation = state.attitude;
 
-        engine_updates.entities = true;
+            scene.entities[1].orientation = state.attitude_commanded;
+            state.last_fc_query = Instant::now();
+
+            engine_updates.entities = true;
+        }
     }
-
     engine_updates
 }
 
@@ -52,7 +55,7 @@ fn event_handler(
 }
 
 /// The entry point for our renderer.
-pub fn run(fc: SerialInterface, mut state: State) {
+pub fn run(state: State) {
     let entities = vec![
         // Aircraft estimated attitude
         Entity::new(

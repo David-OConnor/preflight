@@ -11,10 +11,10 @@ use std::{
     f32::consts::TAU,
     io::{self, Read},
     thread,
-    time::{self, Instant},
+    time::{self, Instant, Duration},
 };
 
-use serialport::{self, SerialPortType};
+use serialport::{self, SerialPortType, SerialPort};
 
 use lin_alg2::f32::Quaternion;
 use types::*;
@@ -25,8 +25,11 @@ mod ui;
 
 const FC_SERIAL_NUMBER: &str = "AN";
 
-// todo: Higher; set here and on FC.
-const BAUD: u32 = 9_600;
+const BAUD: u32 = 115_200;
+
+const TIMEOUT_MILIS: u64 = 10;
+
+
 
 // At this interval, in seconds, request new data from the FC.
 // todo: Do you want some (or all?) of the read data to be pushed at a regular
@@ -34,7 +37,7 @@ const BAUD: u32 = 9_600;
 // todo without explicitly requesting here?
 // todo: Also: multiple intervals for different sorts of data, eg update
 // todo attitude at a higher rate than other things.
-const READ_INTERVAL: f32 = 0.2;
+const READ_INTERVAL: f32 = 0.1;
 const READ_INTERVAL_MS: u128 = (READ_INTERVAL * 1_000.) as u128;
 
 /// Data passed by the flight controller
@@ -106,9 +109,10 @@ impl Default for State {
 }
 
 impl State {
-    /// Request several types of data from the flight controller over USB serial. Return a struct
-    /// containing the data.
-    pub fn read_all(&mut self) -> Result<(), io::Error> {
+    /// Read parameters, such as attitude and altitutde
+    // pub fn read_params(&mut self, port: &Box<dyn SerialPort>) -> Result<(), io::Error> {
+    pub fn read_params(&mut self) -> Result<(), io::Error> {
+        // todo: DRY with port. Trouble passing it as a param due to box<dyn
         let port = match self.interface.serial_port.as_mut() {
             Some(p) => p,
             None => {
@@ -119,15 +123,15 @@ impl State {
             }
         };
 
-        let crc_tx_params = calc_crc(
+        let crc_tx = calc_crc(
             &CRC_LUT,
             &[MsgType::ReqParams as u8],
             MsgType::ReqParams.payload_size() as u8 + 1,
         );
-        let xmit_buf_params = &[MsgType::ReqParams as u8, crc_tx_params];
+        let xmit_buf = &[MsgType::ReqParams as u8, crc_tx];
 
         // Write the buffer requesting params from the FC.
-        port.write_all(xmit_buf_params)?;
+        port.write_all(xmit_buf)?;
 
         // Read the params passed by the FC in response.
         let mut rx_buf = [0; PARAMS_SIZE + 2];
@@ -166,14 +170,79 @@ impl State {
         self.current = f32::from_be_bytes(rx_buf[i..F32_SIZE + i].try_into().unwrap());
         i += F32_SIZE;
 
-        let crc_tx_controls = calc_crc(
+        // todo: CRC check on other items, and impl it here.
+        // todo: Probably return a suitable error type here.
+        let payload_size = MsgType::ReqParams.payload_size();
+        let crc_rx_expected = calc_crc(
+            &CRC_LUT,
+            &rx_buf[..payload_size + 1],
+            payload_size as u8 + 1,
+        );
+        let crc_read = rx_buf[PARAMS_SIZE] + 1;
+        if crc_read != crc_rx_expected {
+            // todo: Do something else here? Eg don't update self and resend.
+            println!("Incorrect CRC from reading params!");
+        }
+
+        Ok(())
+    }
+
+    /// Read system status, and autopilot status
+    // pub fn read_controls(&mut self, port: &Box<dyn SerialPort>) -> Result<(), io::Error> {
+    pub fn read_sys_ap_status(&mut self) -> Result<(), io::Error> {
+        // todo: DRY with port. Trouble passing it as a param due to box<dyn
+        let port = match self.interface.serial_port.as_mut() {
+            Some(p) => p,
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotConnected,
+                    "Flight controller not connected",
+                ))
+            }
+        };
+
+        let crc_tx = calc_crc(
+            &CRC_LUT,
+            &[MsgType::ReqSysApStatus as u8],
+            MsgType::ReqSysApStatus.payload_size() as u8 + 1,
+        );
+        let xmit_buf = &[MsgType::ReqSysApStatus as u8, crc_tx];
+
+        port.write_all(xmit_buf)?;
+
+        // todo: Just sys status for now; do AP too.
+        let mut rx_buf = [0; SYS_AP_STATUS_SIZE + 2];
+        port.read_exact(&mut rx_buf)?;
+
+        let sys_status: [u8; SYS_AP_STATUS_SIZE] = rx_buf[1..SYS_AP_STATUS_SIZE + 1].try_into().unwrap();
+        self.system_status = sys_status.into();
+
+        Ok(())
+    }
+
+    /// Read control channel data.
+    // pub fn read_controls(&mut self, port: &Box<dyn SerialPort>) -> Result<(), io::Error> {
+    pub fn read_controls(&mut self) -> Result<(), io::Error> {
+        // todo: DRY with port. Trouble passing it as a param due to box<dyn
+        let port = match self.interface.serial_port.as_mut() {
+            Some(p) => p,
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotConnected,
+                    "Flight controller not connected",
+                ))
+            }
+        };
+
+
+        let crc_tx = calc_crc(
             &CRC_LUT,
             &[MsgType::ReqControls as u8],
             MsgType::ReqControls.payload_size() as u8 + 1,
         );
-        let xmit_buf_controls = &[MsgType::ReqControls as u8, crc_tx_controls];
+        let xmit_buf = &[MsgType::ReqControls as u8, crc_tx];
 
-        port.write_all(xmit_buf_controls)?;
+        port.write_all(xmit_buf)?;
 
         // let mut rx_buf = [0; CONTROLS_SIZE + 2]; // todo: Bogus leading 1?
         let mut rx_buf = [0; CONTROLS_SIZE + 2];
@@ -182,15 +251,32 @@ impl State {
         let controls: [u8; CONTROLS_SIZE] = rx_buf[1..CONTROLS_SIZE + 1].try_into().unwrap();
         self.controls = controls.into();
 
-        let crc_tx_link_stats = calc_crc(
+        Ok(())
+    }
+
+    /// Read controller link stats data.
+    // pub fn read_link_stats(&mut self, port: &Box<dyn SerialPort>) -> Result<(), io::Error> {
+    pub fn read_link_stats(&mut self) -> Result<(), io::Error> {
+        // todo: DRY with port. Trouble passing it as a param due to box<dyn
+        let port = match self.interface.serial_port.as_mut() {
+            Some(p) => p,
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotConnected,
+                    "Flight controller not connected",
+                ))
+            }
+        };
+
+        let crc_tx = calc_crc(
             &CRC_LUT,
             &[MsgType::ReqLinkStats as u8],
             MsgType::ReqLinkStats.payload_size() as u8 + 1,
         );
-        let xmit_buf_link_stats = &[MsgType::ReqLinkStats as u8, crc_tx_link_stats];
+        let xmit_buf = &[MsgType::ReqLinkStats as u8, crc_tx];
 
         // todo: DRY between these calls
-        port.write_all(xmit_buf_link_stats)?;
+        port.write_all(xmit_buf)?;
 
         let mut rx_buf = [0; LINK_STATS_SIZE + 2];
         port.read_exact(&mut rx_buf)?;
@@ -199,14 +285,31 @@ impl State {
 
         self.link_stats = link_stats.into();
 
-        let crc_waypoints = calc_crc(
+        Ok(())
+    }
+
+    /// Read waypoints data from the flight controller.
+    // pub fn read_waypoints(&mut self, port: &Box<dyn SerialPort>) -> Result<(), io::Error> {
+    pub fn read_waypoints(&mut self) -> Result<(), io::Error> {
+        // todo: DRY with port. Trouble passing it as a param due to box<dyn
+        let port = match self.interface.serial_port.as_mut() {
+            Some(p) => p,
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotConnected,
+                    "Flight controller not connected",
+                ))
+            }
+        };
+
+        let crc_tx = calc_crc(
             &CRC_LUT,
             &[MsgType::ReqWaypoints as u8],
             MsgType::ReqWaypoints.payload_size() as u8 + 1,
         );
-        let xmit_buf_waypoints = &[MsgType::ReqWaypoints as u8, crc_waypoints];
+        let xmit_buf = &[MsgType::ReqWaypoints as u8, crc_tx];
 
-        port.write_all(xmit_buf_waypoints)?;
+        port.write_all(xmit_buf)?;
 
         let mut rx_buf = [0; WAYPOINTS_SIZE + 2];
         port.read_exact(&mut rx_buf)?;
@@ -220,17 +323,33 @@ impl State {
 
         // todo: Lat, Lon
 
-        let payload_size = MsgType::ReqParams.payload_size();
-        let crc_rx_expected = calc_crc(
-            &CRC_LUT,
-            &rx_buf[..payload_size + 1],
-            payload_size as u8 + 1,
-        );
-        let crc_read = rx_buf[PARAMS_SIZE] + 1;
-        if crc_read != crc_rx_expected {
-            // todo: Do something else here? Eg don't update self and resend.
-            println!("Incorrect CRC from reading params!");
-        }
+        Ok(())
+    }
+
+    /// Request several types of data from the flight controller over USB serial. Return a struct
+    /// containing the data.
+    pub fn read_all(&mut self) -> Result<(), io::Error> {
+        let mut port = match self.interface.serial_port.as_mut() {
+            Some(p) => p,
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotConnected,
+                    "Flight controller not connected",
+                ))
+            }
+        };
+
+        // self.read_params(port)?;
+        // self.read_controls(port)?;
+        // self.read_link_stats(port)?;
+        // self.read_waypoints(port)?;
+        //
+        self.read_params()?;
+        self.read_sys_ap_status()?;
+        self.read_controls()?;
+        self.read_link_stats()?;
+        self.read_waypoints()?;
+
 
         Ok(())
     }
@@ -371,6 +490,21 @@ fn quat_from_buf(p: &[u8; QUATERNION_SIZE]) -> Quaternion {
     }
 }
 
+impl From<[u8; SYS_STATUS_SIZE]> for SystemStatus {
+    fn from(p: [u8; SYS_STATUS_SIZE]) -> Self {
+        // todo: You could achieve more efficient packing.
+        SystemStatus {
+            imu: p[0].try_into().unwrap(),
+            baro: p[1].try_into().unwrap(),
+            gps: p[2].try_into().unwrap(),
+            tof: p[3].try_into().unwrap(),
+            magnetometer: p[4].try_into().unwrap(),
+            esc_telemetry: p[5].try_into().unwrap(),
+            esc_rpm: p[6].try_into().unwrap(),
+        }
+    }
+}
+
 impl From<[u8; CONTROLS_SIZE]> for ChannelData {
     /// 19 f32s x 4 = 76. In the order we have defined in the struct.
     fn from(p: [u8; CONTROLS_SIZE]) -> Self {
@@ -399,20 +533,6 @@ impl From<[u8; LINK_STATS_SIZE]> for LinkStats {
             uplink_snr: p[3] as i8,
             uplink_tx_power: p[4],
             ..Default::default() // other fields not used.
-        }
-    }
-}
-
-impl From<[u8; SYS_STATUS_SIZE]> for SystemStatus {
-    fn from(p: [u8; SYS_STATUS_SIZE]) -> Self {
-        SystemStatus {
-            imu: p[0].try_into().unwrap(),
-            baro: p[0].try_into().unwrap(),
-            gps: p[0].try_into().unwrap(),
-            tof: p[0].try_into().unwrap(),
-            magnetometer: p[0].try_into().unwrap(),
-            esc_telemetry: p[0].try_into().unwrap(),
-            esc_rpm: p[0].try_into().unwrap(),
         }
     }
 }
@@ -474,7 +594,7 @@ pub struct SerialInterface {
     /// This `Box<dyn Trait>` is a awk, but part of the `serial_port`. This is for cross-platform
     /// compatibity, since Windows and Linux use different types; the `serial_port` docs are build
     /// for Linux, and don't show the Windows type. (ie `TTYPort vs COMPort`)
-    pub serial_port: Option<Box<dyn serialport::SerialPort>>,
+    pub serial_port: Option<Box<dyn SerialPort>>,
 }
 
 impl SerialInterface {
@@ -484,16 +604,28 @@ impl SerialInterface {
                 if let SerialPortType::UsbPort(info) = &port_info.port_type {
                     if let Some(sn) = &info.serial_number {
                         if sn == FC_SERIAL_NUMBER {
-                            let port = serialport::new(&port_info.port_name, BAUD)
-                                // .open()
-                                .open()
-                                // todo: Why is the console being spammed with this error?
-                                // .unwrap();
-                                .expect("Failed to open serial port");
-
-                            return Self {
-                                serial_port: Some(port),
-                            };
+                            match serialport::new(&port_info.port_name, BAUD)
+                                .timeout(Duration::from_millis(TIMEOUT_MILIS))
+                                .open() {
+                                // }
+                                Ok(port) => {
+                                    return Self { serial_port: Some(port) };
+                                }
+                                Err(serialport::Error { kind, description }) => {
+                                    match kind {
+                                        // serialport::ErrorKind::Io(io_kind) => {
+                                        //     println!("IO error openin the port");
+                                        // }
+                                        serialport::ErrorKind::NoDevice => {
+                                            println!("No device: {:?}", description);
+                                        }
+                                        _ => {
+                                            println!("Error opening the port: {:?} - {:?}", kind, description);
+                                        },
+                                    }
+                                }
+                            }
+                            // .expect("Failed to open serial port");
                         }
                     }
                 }
@@ -505,9 +637,9 @@ impl SerialInterface {
 }
 
 fn main() {
-    let fc = SerialInterface::new();
-    let state = State::default();
+    let mut state = State::default();
+    state.interface = SerialInterface::new();
 
     // todo: Separate threads for querying FC, and render?
-    render::run(fc, state);
+    render::run(state);
 }
