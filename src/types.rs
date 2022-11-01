@@ -15,7 +15,7 @@ pub const WAYPOINT_SIZE: usize = F32_SIZE * 3 + WAYPOINT_MAX_NAME_LEN + 1;
 pub const WAYPOINTS_SIZE: usize = MAX_WAYPOINTS * WAYPOINT_SIZE;
 pub const SET_SERVO_POSIT_SIZE: usize = 1 + F32_SIZE;
 pub const WAYPOINT_MAX_NAME_LEN: usize = 7;
-pub const SYS_STATUS_SIZE: usize = 7; // Sensor status (u8) * 7
+pub const SYS_STATUS_SIZE: usize = 9; // Sensor status (u8) * 9
 pub const AP_STATUS_SIZE: usize = 0; // todo
 pub const SYS_AP_STATUS_SIZE: usize = SYS_STATUS_SIZE + AP_STATUS_SIZE;
 
@@ -276,6 +276,8 @@ pub struct SystemStatus {
     pub magnetometer: SensorStatus,
     pub esc_telemetry: SensorStatus,
     pub esc_rpm: SensorStatus,
+    pub rf_control_link: SensorStatus,
+    pub rf_control_fault: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]

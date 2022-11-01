@@ -110,7 +110,7 @@ pub fn run(state: State) {
     };
 
     let input_settings = InputSettings::default();
-    let ui_settings = UiSettings { width: 0. };
+    let ui_settings = UiSettings { width: 0., icon_path: None };
 
     graphics::run(
         state,

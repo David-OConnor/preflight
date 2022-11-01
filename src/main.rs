@@ -498,6 +498,8 @@ impl From<[u8; SYS_STATUS_SIZE]> for SystemStatus {
             magnetometer: p[4].try_into().unwrap(),
             esc_telemetry: p[5].try_into().unwrap(),
             esc_rpm: p[6].try_into().unwrap(),
+            rf_control_link: p[7].try_into().unwrap(),
+            rf_control_fault: p[8] != 0,
         }
     }
 }

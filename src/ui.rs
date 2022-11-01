@@ -55,6 +55,22 @@ impl ArmStatus {
     }
 }
 
+fn link_qual_to_color(lq: u8) -> Color32 {
+    match lq {
+        95..=100 => Color32::LIGHT_GREEN,
+        70..=94 => Color32::LIGHT_YELLOW,
+        _ => Color32::LIGHT_RED,
+    }
+}
+
+fn test_val_to_color(v: bool) -> Color32 {
+    if v {
+        Color32::LIGHT_RED
+    } else {
+        Color32::LIGHT_GRAY
+    }
+}
+
 /// See Corvus, `ElrsTxPower`
 fn tx_pwr_from_val(val: u8) -> String {
     match val {
@@ -189,6 +205,16 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
             add_sensor_status("GNSS (ie GPS): ", state.system_status.gps, ui);
             add_sensor_status("Magnetometer: ", state.system_status.magnetometer, ui);
             // add_sensor_status("ESC telemetry: ", state.system_status.esc_telemetry, ui);
+            add_sensor_status("RF control link: ", state.system_status.rf_control_link, ui);
+
+            // todo: Probably a separate row for faults?
+            // todo:  Helper as above for bit statuses.
+            let val = state.system_status.rf_control_fault;
+            ui.vertical(|ui| {
+                ui.label("RF faults: ");
+                ui.label(RichText::new(val.to_string()).color(test_val_to_color(val)));
+            });
+            ui.add_space(SPACING_HORIZONTAL);
         });
 
         ui.add_space(SPACE_BETWEEN_SECTIONS);
@@ -303,7 +329,8 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
             ui.vertical(|ui| {
                 ui.label("Link qual");
-                ui.label(&state.link_stats.uplink_link_quality.to_string());
+                let val = &state.link_stats.uplink_link_quality;
+                ui.label(RichText::new(val.to_string()).color(link_qual_to_color(*val)));
             });
             ui.add_space(SPACING_HORIZONTAL_TIGHT);
 
@@ -339,7 +366,8 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
             ui.vertical(|ui| {
                 ui.label("Downlink link qual");
-                ui.label(&state.link_stats.downlink_link_quality.to_string());
+                let val = &state.link_stats.downlink_link_quality;
+                ui.label(RichText::new(val.to_string()).color(link_qual_to_color(*val)));
             });
             ui.add_space(SPACING_HORIZONTAL_TIGHT);
 
@@ -358,10 +386,14 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                 ui.label("Alt hold");
                 ui.label(&alt_hold);
             });
+            ui.add_space(SPACING_HORIZONTAL);
+
             ui.vertical(|ui| {
                 ui.label("Heading hold");
                 ui.label(&hdg_hold);
             });
+            ui.add_space(SPACING_HORIZONTAL);
+
             // todo: When you put yaw and/or roll assist back, you probably
             // todo want one field for it.
             ui.vertical(|ui| {
@@ -380,14 +412,20 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                 ui.label("Motor 1 RPM");
                 ui.label(&format_rpm(state.rpm1));
             });
+            ui.add_space(SPACING_HORIZONTAL);
+
             ui.vertical(|ui| {
                 ui.label("Motor 2 RPM");
                 ui.label(&format_rpm(state.rpm2));
             });
+            ui.add_space(SPACING_HORIZONTAL);
+
             ui.vertical(|ui| {
                 ui.label("Motor 3 RPM");
                 ui.label(&format_rpm(state.rpm3));
             });
+            ui.add_space(SPACING_HORIZONTAL);
+
             ui.vertical(|ui| {
                 ui.label("Motor 4 RPM");
                 ui.label(&format_rpm(state.rpm3));
