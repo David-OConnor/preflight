@@ -66,6 +66,9 @@ pub struct State {
     /// todo: Consider diff update rate (and last query times) for
     /// todo different types of data.
     pub last_fc_query: Instant,
+    /// Used for determining if we're still connected, and getting updates from the FC.
+    pub last_fc_response: Instant,
+    pub connected_to_fc: bool,
     interface: SerialInterface,
 }
 
@@ -101,6 +104,8 @@ impl Default for State {
             system_status: Default::default(),
             aircraft_type: AircraftType::Quadcopter,
             last_fc_query: Instant::now(),
+            last_fc_response: Instant::now(), // todo: Perhaps a time in the distant past is more apt.
+            connected_to_fc: false,
             interface: SerialInterface::new(),
         }
     }

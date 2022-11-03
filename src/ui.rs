@@ -2,6 +2,7 @@
 
 use std::f32::consts::TAU;
 
+use egui::CursorIcon::Default;
 use egui::{self, Color32, RichText};
 
 use graphics::{EngineUpdates, Scene};
@@ -143,9 +144,16 @@ fn add_sensor_status(label: &str, val: SensorStatus, ui: &mut egui::Ui) {
     ui.add_space(SPACING_HORIZONTAL);
 }
 
+fn add_not_connected_page(ui: &mut egui::Ui) {
+    let text = "No data received from the flight controller";
+    ui.heading(RichText::new(text).color(Color32::GOLD).size(60.));
+    ui.add_space(300.); // So not aligned to bottom of the window.
+}
+
 pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineUpdates {
     // pub fn run() -> impl FnMut(&egui::Context) {
     //     move |state: &mut State, ctx: &egui::Context| {
+
     let agl = match &state.altitude_agl {
         Some(a) => a.to_string() + " M",
         None => "(Not connected)".to_owned(), // todo: Currently doesn't show
@@ -189,6 +197,10 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
     let panel = egui::TopBottomPanel::bottom("UI panel"); // ID must be unique among panels.
 
     panel.show(ctx, |ui| {
+        if !state.connected_to_fc {
+            add_not_connected_page(ui);
+            return; // todo?
+        }
         // ui.vscroll(true);
 
         ui.spacing_mut().item_spacing = egui::vec2(ITEM_SPACING_X, ITEM_SPACING_Y);
@@ -456,5 +468,5 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
     });
     // }
 
-    Default::default()
+    EngineUpdates::default()
 }

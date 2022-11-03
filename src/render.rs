@@ -1,5 +1,6 @@
 //! This module contains code related to the 3D render (Aircraft attitude depiction etc)
 
+use std::time::Duration;
 use std::{
     boxed::Box,
     sync::atomic::{AtomicUsize, Ordering},
@@ -34,17 +35,29 @@ fn render_handler(state: &mut State, scene: &mut Scene, dt: f32) -> EngineUpdate
         // todo: Troubleshooting acces is denied error.
         state.interface = SerialInterface::new();
 
-        if state.interface.serial_port.is_some() {
-            // state.read_all().unwrap();
-            state.read_all().ok(); // todo temp!
+        state.last_fc_query = Instant::now();
 
-            scene.entities[0].orientation = state.attitude;
+        match &state.interface.serial_port {
+            Some(_port) => {
+                // state.read_all().unwrap();
+                state.read_all().ok(); // todo temp!
 
-            scene.entities[1].orientation = state.attitude_commanded;
-            state.last_fc_query = Instant::now();
+                scene.entities[0].orientation = state.attitude;
 
-            engine_updates.entities = true;
+                scene.entities[1].orientation = state.attitude_commanded;
+
+                state.connected_to_fc = true;
+                state.last_fc_response = Instant::now();
+
+                engine_updates.entities = true;
+            }
+            None => {}
         }
+
+        // todo: Don't hard-code this: Use a const etc for the thresh
+        if (Instant::now() - state.last_fc_response) > Duration::from_millis(500) {
+            state.connected_to_fc = false;
+        };
     }
     engine_updates
 }
@@ -110,7 +123,10 @@ pub fn run(state: State) {
     };
 
     let input_settings = InputSettings::default();
-    let ui_settings = UiSettings { width: 0., icon_path: None };
+    let ui_settings = UiSettings {
+        width: 0.,
+        icon_path: None,
+    };
 
     graphics::run(
         state,
