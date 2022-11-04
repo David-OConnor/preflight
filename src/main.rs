@@ -72,6 +72,8 @@ pub struct State {
     // todo: Use an enum for control mapping.
     pub control_mapping_quad: ControlMappingQuad,
     pub control_mapping_fixed_wing: ControlMappingFixedWing,
+    // todo: ui_state field?
+    pub editing_motor_mapping: bool,
     interface: SerialInterface,
 }
 
@@ -109,9 +111,10 @@ impl Default for State {
             last_fc_query: Instant::now(),
             last_fc_response: Instant::now(), // todo: Perhaps a time in the distant past is more apt.
             connected_to_fc: false,
-            interface: SerialInterface::new(),
             control_mapping_quad: Default::default(),
             control_mapping_fixed_wing: Default::default(),
+            editing_motor_mapping: false,
+            interface: SerialInterface::new(),
         }
     }
 }
@@ -396,6 +399,8 @@ impl State {
         self.read_link_stats()?;
         // todo: Put back; issue with it to correct.
         // self.read_waypoints()?;
+
+        // todo: Don't read some things like control mapping each time.
         self.read_control_mapping()?;
 
         Ok(())
@@ -623,7 +628,6 @@ fn waypoints_from_buf(w: [u8; WAYPOINTS_SIZE]) -> [Option<Location>; MAX_WAYPOIN
 // todo: Fixed wing too
 impl From<[u8; CONTROL_MAPPING_QUAD_SIZE]> for ControlMappingQuad {
     fn from(p: [u8; CONTROL_MAPPING_QUAD_SIZE]) -> Self {
-        println!("P: {:?}", p);
         ControlMappingQuad {
             m1: (p[0] & 0b11).try_into().unwrap(),
             m2: ((p[0] >> 2) & 0b11).try_into().unwrap(),

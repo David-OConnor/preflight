@@ -2,8 +2,7 @@
 
 use std::f32::consts::TAU;
 
-use egui::CursorIcon::Default;
-use egui::{self, Color32, RichText};
+use egui::{self, Button, Color32, ComboBox, CursorIcon::Default, RichText};
 
 use graphics::{EngineUpdates, Scene};
 
@@ -20,6 +19,7 @@ const SPACE_BETWEEN_SECTIONS: f32 = 30.;
 const SPACING_HORIZONTAL: f32 = 26.;
 const SPACING_HORIZONTAL_TIGHT: f32 = 16.;
 const CONTROL_BAR_WIDTH: f32 = 200.; // eg pitch, roll, yaw, throttle control.
+const MOTOR_MAPPING_DROPDOWN_WIDTH: f32 = 100.;
 
 impl SensorStatus {
     // Note Not included in Corvus
@@ -467,36 +467,113 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
             AircraftType::Quadcopter => {
                 ui.heading("Motor mapping");
 
-                ui.horizontal(|ui| {
-                    // todo: For now, only set up for quad
-                    ui.vertical(|ui| {
-                        ui.label("Motor 1");
-                        ui.label(state.control_mapping_quad.m1.to_str());
-                        ui.label(motor_dir_format(state.control_mapping_quad.m1_reversed));
-                    });
-                    ui.add_space(SPACING_HORIZONTAL);
+                // todo: Warning color
+                if ui
+                    .add(
+                        Button::new(RichText::new("Change motor mapping").color(Color32::BLACK))
+                            .fill(Color32::from_rgb(220, 120, 10)),
+                    )
+                    .clicked()
+                {
+                    state.editing_motor_mapping = !state.editing_motor_mapping;
+                };
 
-                    ui.vertical(|ui| {
-                        ui.label("Motor 2");
-                        ui.label(state.control_mapping_quad.m2.to_str());
-                        ui.label(motor_dir_format(state.control_mapping_quad.m2_reversed));
-                    });
-                    ui.add_space(SPACING_HORIZONTAL);
+                // todo: Helper fns here to reduce rep
+                if state.editing_motor_mapping {
+                    ui.horizontal(|ui| {
+                        // todo: For now, only set up for quad
+                        ui.vertical(|ui| {
+                            ui.label("Motor 1");
+                            ui.label(state.control_mapping_quad.m1.to_str());
 
-                    ui.vertical(|ui| {
-                        ui.label("Motor 3");
-                        ui.label(state.control_mapping_quad.m3.to_str());
-                        ui.label(motor_dir_format(state.control_mapping_quad.m3_reversed));
-                    });
-                    ui.add_space(SPACING_HORIZONTAL);
+                            let mut selected = &mut state.control_mapping_quad.m1_reversed;
+                            ComboBox::from_id_source(0)
+                                .width(MOTOR_MAPPING_DROPDOWN_WIDTH)
+                                .selected_text(motor_dir_format(*selected))
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(selected, false, "Normal");
+                                    ui.selectable_value(selected, true, "Reversed");
+                                });
+                        });
+                        ui.add_space(SPACING_HORIZONTAL);
 
-                    ui.vertical(|ui| {
-                        ui.label("Motor 4");
-                        ui.label(state.control_mapping_quad.m4.to_str());
-                        ui.label(motor_dir_format(state.control_mapping_quad.m4_reversed));
+                        ui.vertical(|ui| {
+                            ui.label("Motor 2");
+                            ui.label(state.control_mapping_quad.m1.to_str());
+
+                            let mut selected = &mut state.control_mapping_quad.m2_reversed;
+                            ComboBox::from_id_source(1)
+                                .width(MOTOR_MAPPING_DROPDOWN_WIDTH)
+                                .selected_text(motor_dir_format(*selected))
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(selected, false, "Normal");
+                                    ui.selectable_value(selected, true, "Reversed");
+                                });
+                        });
+                        ui.add_space(SPACING_HORIZONTAL);
+
+                        ui.vertical(|ui| {
+                            ui.label("Motor 3");
+                            ui.label(state.control_mapping_quad.m1.to_str());
+
+                            let mut selected = &mut state.control_mapping_quad.m3_reversed;
+                            ComboBox::from_id_source(2)
+                                .width(MOTOR_MAPPING_DROPDOWN_WIDTH)
+                                .selected_text(motor_dir_format(*selected))
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(selected, false, "Normal");
+                                    ui.selectable_value(selected, true, "Reversed");
+                                });
+                        });
+                        ui.add_space(SPACING_HORIZONTAL);
+
+                        ui.vertical(|ui| {
+                            ui.label("Motor 4");
+                            ui.label(state.control_mapping_quad.m1.to_str());
+
+                            let mut selected = &mut state.control_mapping_quad.m4_reversed;
+                            ComboBox::from_id_source(3)
+                                .width(MOTOR_MAPPING_DROPDOWN_WIDTH)
+                                .selected_text(motor_dir_format(*selected))
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(selected, false, "Normal");
+                                    ui.selectable_value(selected, true, "Reversed");
+                                });
+                        });
+                        ui.add_space(SPACING_HORIZONTAL);
                     });
-                    ui.add_space(SPACING_HORIZONTAL);
-                });
+                } else {
+                    ui.horizontal(|ui| {
+                        // todo: For now, only set up for quad
+                        ui.vertical(|ui| {
+                            ui.label("Motor 1");
+                            ui.label(state.control_mapping_quad.m1.to_str());
+                            ui.label(motor_dir_format(state.control_mapping_quad.m1_reversed));
+                        });
+                        ui.add_space(SPACING_HORIZONTAL);
+
+                        ui.vertical(|ui| {
+                            ui.label("Motor 2");
+                            ui.label(state.control_mapping_quad.m2.to_str());
+                            ui.label(motor_dir_format(state.control_mapping_quad.m2_reversed));
+                        });
+                        ui.add_space(SPACING_HORIZONTAL);
+
+                        ui.vertical(|ui| {
+                            ui.label("Motor 3");
+                            ui.label(state.control_mapping_quad.m3.to_str());
+                            ui.label(motor_dir_format(state.control_mapping_quad.m3_reversed));
+                        });
+                        ui.add_space(SPACING_HORIZONTAL);
+
+                        ui.vertical(|ui| {
+                            ui.label("Motor 4");
+                            ui.label(state.control_mapping_quad.m4.to_str());
+                            ui.label(motor_dir_format(state.control_mapping_quad.m4_reversed));
+                        });
+                        ui.add_space(SPACING_HORIZONTAL);
+                    });
+                }
 
                 ui.add_space(SPACE_BETWEEN_SECTIONS);
             }
@@ -506,15 +583,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                 ui.add_space(SPACE_BETWEEN_SECTIONS);
             }
         }
-
-        // ui.text_edit_singleline(&mut name);
-
-        // ui.add(egui::Slider::new(&mut age, 0..=120).text("age"));
-        // if ui.button("Click each year").clicked() {
-        // Perform action here.
-        // }
     });
-    // }
 
     EngineUpdates::default()
 }
