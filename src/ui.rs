@@ -9,7 +9,7 @@ use graphics::{EngineUpdates, Scene};
 
 use crate::{
     types::{AircraftType, AltType, ArmStatus, SensorStatus, YawAssist},
-    State,
+    RotorPosition, State,
 };
 
 // pub const UI_PANEL_SIZE: f32 = 1_600.;
@@ -19,6 +19,7 @@ const ITEM_SPACING_Y: f32 = 12.;
 const SPACE_BETWEEN_SECTIONS: f32 = 30.;
 const SPACING_HORIZONTAL: f32 = 26.;
 const SPACING_HORIZONTAL_TIGHT: f32 = 16.;
+const CONTROL_BAR_WIDTH: f32 = 200.; // eg pitch, roll, yaw, throttle control.
 
 impl SensorStatus {
     // Note Not included in Corvus
@@ -56,6 +57,17 @@ impl ArmStatus {
     }
 }
 
+impl RotorPosition {
+    fn to_str(&self) -> &str {
+        match self {
+            Self::FrontLeft => "Front left",
+            Self::FrontRight => "Front right",
+            Self::AftLeft => "Aft left",
+            Self::AftRight => "Aft right",
+        }
+    }
+}
+
 fn link_qual_to_color(lq: u8) -> Color32 {
     match lq {
         95..=100 => Color32::LIGHT_GREEN,
@@ -72,16 +84,21 @@ fn test_val_to_color(v: bool) -> Color32 {
     }
 }
 
+fn motor_dir_format(v: bool) -> String {
+    if v { "Reversed" } else { "Normal" }.to_owned()
+}
+
 /// See Corvus, `ElrsTxPower`
 fn tx_pwr_from_val(val: u8) -> String {
     match val {
-        1 => "10mW".to_owned(),
-        2 => "25mW".to_owned(),
-        8 => "50mW".to_owned(),
-        3 => "100mW".to_owned(),
-        7 => "250mW".to_owned(),
-        _ => "(Unknown)".to_owned(),
+        1 => "10mW",
+        2 => "25mW",
+        8 => "50mW",
+        3 => "100mW",
+        7 => "250mW",
+        _ => "(Unknown)",
     }
+    .to_owned()
 }
 
 enum LatLon {
@@ -142,6 +159,24 @@ fn add_sensor_status(label: &str, val: SensorStatus, ui: &mut egui::Ui) {
         ui.label(RichText::new(val.to_str()).color(val.to_color()));
     });
     ui.add_space(SPACING_HORIZONTAL);
+}
+
+/// Add a progress bar displaying the current position of a control.
+fn add_control_disp(mut val: f32, text: &str, throttle: bool, ui: &mut egui::Ui) {
+    ui.label(text);
+    // convert from -1. to 1. to 0. to 1.
+    let v = if throttle { val / 2. + 0.5 } else { val };
+    let bar = egui::ProgressBar::new(v).desired_width(CONTROL_BAR_WIDTH);
+    // let range = if throttle {
+    //     0.0..=0.1
+    // } else {
+    //     -1.0..=1.0
+    // };
+
+    // let v2 = &mut val;
+    // let slider = egui::Slider::new(v2, range);
+    // ui.add(slider);
+    ui.add(bar);
 }
 
 fn add_not_connected_page(ui: &mut egui::Ui) {
@@ -205,19 +240,19 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
         ui.spacing_mut().item_spacing = egui::vec2(ITEM_SPACING_X, ITEM_SPACING_Y);
 
-        ui.heading("AnyLeaf Preflight");
+        // ui.heading("AnyLeaf Preflight");
 
         ui.heading("System status"); // todo: Get this from FC; update on both sides.
 
         ui.horizontal(|ui| {
             add_sensor_status("IMU: ", state.system_status.imu, ui);
+            add_sensor_status("RF control link: ", state.system_status.rf_control_link, ui);
             add_sensor_status("RPM readings: ", state.system_status.esc_rpm, ui);
             add_sensor_status("Baro altimeter: ", state.system_status.baro, ui);
             add_sensor_status("AGL altimeter: ", state.system_status.tof, ui);
             add_sensor_status("GNSS (ie GPS): ", state.system_status.gps, ui);
             add_sensor_status("Magnetometer: ", state.system_status.magnetometer, ui);
             // add_sensor_status("ESC telemetry: ", state.system_status.esc_telemetry, ui);
-            add_sensor_status("RF control link: ", state.system_status.rf_control_link, ui);
 
             // todo: Probably a separate row for faults?
             // todo:  Helper as above for bit statuses.
@@ -281,39 +316,21 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
             ui.vertical(|ui| {
                 ui.heading("Control commands");
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        ui.label("Pitch");
-                        ui.label(format!("{:.2}", &state.controls.pitch));
-                    });
-                    ui.add_space(SPACING_HORIZONTAL);
+                // ui.horizontal(|ui| {
 
-                    ui.vertical(|ui| {
-                        ui.label("Roll");
-                        ui.label(format!("{:.2}", &state.controls.roll));
-                    });
-                    ui.add_space(SPACING_HORIZONTAL);
+                add_control_disp(state.controls.pitch, "Pitch", true, ui);
+                add_control_disp(state.controls.roll, "Roll", true, ui);
+                add_control_disp(state.controls.yaw, "Yaw", true, ui);
+                add_control_disp(state.controls.throttle, "Throttle", false, ui);
 
-                    ui.vertical(|ui| {
-                        ui.label("Yaw");
-                        ui.label(format!("{:.2}", &state.controls.yaw));
-                    });
-                    ui.add_space(SPACING_HORIZONTAL);
-
-                    ui.vertical(|ui| {
-                        ui.label("Throttle");
-                        ui.label(format!("{:.2}", &state.controls.throttle));
-                    });
-                    ui.add_space(SPACING_HORIZONTAL);
-
-                    // todo Important: This isn't the actual arm status state! It's the control input!
-                    // todo: Potentially misleading.
-                    ui.vertical(|ui| {
-                        ui.label("Motor arm switch");
-                        let val = state.controls.arm_status;
-                        ui.label(RichText::new(val.to_str()).color(val.to_color()));
-                    });
+                // todo Important: This isn't the actual arm status state! It's the control input!
+                // todo: Potentially misleading.
+                ui.vertical(|ui| {
+                    ui.label("Motor arm switch");
+                    let val = state.controls.arm_status;
+                    ui.label(RichText::new(val.to_str()).color(val.to_color()));
                 });
+                // });
             });
         });
 
@@ -449,6 +466,37 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
         match state.aircraft_type {
             AircraftType::Quadcopter => {
                 ui.heading("Motor mapping");
+
+                ui.horizontal(|ui| {
+                    // todo: For now, only set up for quad
+                    ui.vertical(|ui| {
+                        ui.label("Motor 1");
+                        ui.label(state.control_mapping_quad.m1.to_str());
+                        ui.label(motor_dir_format(state.control_mapping_quad.m1_reversed));
+                    });
+                    ui.add_space(SPACING_HORIZONTAL);
+
+                    ui.vertical(|ui| {
+                        ui.label("Motor 2");
+                        ui.label(state.control_mapping_quad.m2.to_str());
+                        ui.label(motor_dir_format(state.control_mapping_quad.m2_reversed));
+                    });
+                    ui.add_space(SPACING_HORIZONTAL);
+
+                    ui.vertical(|ui| {
+                        ui.label("Motor 3");
+                        ui.label(state.control_mapping_quad.m3.to_str());
+                        ui.label(motor_dir_format(state.control_mapping_quad.m3_reversed));
+                    });
+                    ui.add_space(SPACING_HORIZONTAL);
+
+                    ui.vertical(|ui| {
+                        ui.label("Motor 4");
+                        ui.label(state.control_mapping_quad.m4.to_str());
+                        ui.label(motor_dir_format(state.control_mapping_quad.m4_reversed));
+                    });
+                    ui.add_space(SPACING_HORIZONTAL);
+                });
 
                 ui.add_space(SPACE_BETWEEN_SECTIONS);
             }

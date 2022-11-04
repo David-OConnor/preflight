@@ -18,6 +18,7 @@ pub const WAYPOINT_MAX_NAME_LEN: usize = 7;
 pub const SYS_STATUS_SIZE: usize = 9; // Sensor status (u8) * 9
 pub const AP_STATUS_SIZE: usize = 0; // todo
 pub const SYS_AP_STATUS_SIZE: usize = SYS_STATUS_SIZE + AP_STATUS_SIZE;
+pub const CONTROL_MAPPING_QUAD_SIZE: usize = 2; // For quad only atm. Address this.
 
 // Packet sizes are payload size + 2. Additional data are message type, and CRC.
 pub const PARAMS_PACKET_SIZE: usize = PARAMS_SIZE + 2;
@@ -25,6 +26,7 @@ pub const CONTROLS_PACKET_SIZE: usize = CONTROLS_SIZE + 2;
 pub const LINK_STATS_PACKET_SIZE: usize = LINK_STATS_SIZE + 2;
 pub const WAYPOINTS_PACKET_SIZE: usize = WAYPOINTS_SIZE + 2;
 pub const SYS_AP_STATUS_PACKET_SIZE: usize = SYS_AP_STATUS_SIZE + 2;
+pub const CONTROL_MAPPING_QUAD_PACKET_SIZE: usize = CONTROL_MAPPING_QUAD_SIZE + 2;
 
 pub struct DecodeError {}
 
@@ -86,6 +88,8 @@ pub enum MsgType {
     SetServoPosit = 15,
     ReqSysApStatus = 16,
     SysApStatus = 17,
+    ReqControlMapping = 18,
+    ControlMapping = 19,
 }
 
 impl MsgType {
@@ -109,6 +113,8 @@ impl MsgType {
             Self::SetServoPosit => SET_SERVO_POSIT_SIZE,
             Self::ReqSysApStatus => 0,
             Self::SysApStatus => SYS_AP_STATUS_SIZE,
+            Self::ReqControlMapping => 0,
+            Self::ControlMapping => CONTROL_MAPPING_QUAD_SIZE,
         }
     }
 }
@@ -138,7 +144,13 @@ pub enum Rotor {
     R4 = 3,
 }
 
-#[derive(Clone, Copy, Debug)]
+impl Default for Rotor {
+    fn default() -> Self {
+        Self::R1
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, TryFromPrimitive)]
 #[repr(u8)]
 pub enum RotorPosition {
     FrontLeft = 0,
@@ -147,17 +159,48 @@ pub enum RotorPosition {
     AftRight = 3,
 }
 
+impl Default for RotorPosition {
+    fn default() -> Self {
+        Self::FrontLeft
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum ServoWing {
     S1,
     S2,
 }
 
-#[derive(Clone, Copy, Debug)]
+impl Default for ServoWing {
+    fn default() -> Self {
+        Self::S1
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, TryFromPrimitive)]
 #[repr(u8)]
 pub enum ServoWingPosition {
     Left = 0,
     Right = 1,
+}
+
+impl Default for ServoWingPosition {
+    fn default() -> Self {
+        Self::Left
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, TryFromPrimitive)]
+#[repr(u8)]
+pub enum RotationDir {
+    Clockwise = 0,
+    CounterClockwise = 1,
+}
+
+impl Default for RotationDir {
+    fn default() -> Self {
+        Self::Clockwise
+    }
 }
 
 pub const fn crc_init(poly: u8) -> [u8; 256] {
@@ -387,4 +430,36 @@ impl Default for OrbitDirection {
 pub enum OrbitShape {
     Circular,
     Racetrack,
+}
+
+#[derive(Default)]
+pub struct ControlMappingQuad {
+    pub m1: RotorPosition,
+    pub m2: RotorPosition,
+    pub m3: RotorPosition,
+    pub m4: RotorPosition,
+    /// It's common to arbitrarily wire motors to the ESC. Reverse each from its
+    /// default direction, as required.
+    pub m1_reversed: bool,
+    pub m2_reversed: bool,
+    pub m3_reversed: bool,
+    pub m4_reversed: bool,
+    pub frontleft_aftright_dir: RotationDir,
+}
+
+#[derive(Default)]
+pub struct ControlMappingFixedWing {
+    pub s1: ServoWingPosition,
+    pub s2: ServoWingPosition,
+    /// Reverse direction is somewhat arbitrary.
+    pub s1_reversed: bool,
+    pub s2_reversed: bool,
+    /// These represent full scale deflection of the evelons, on a scale of -1 to +1.
+    /// We don't use full ARR for max high, since that would be full high the whole time.
+    /// Note that the 0 position is fixed; we don't map between these two values; we map between
+    /// 0 and each of these.
+    /// Note: We currently clamp high and low to be on opposite sides of 0. This may not reflect
+    /// control surface reality, but keeps things simple, and should be good enough to start.
+    pub servo_high: f32,
+    // pub servo_low: f32,
 }

@@ -69,6 +69,9 @@ pub struct State {
     /// Used for determining if we're still connected, and getting updates from the FC.
     pub last_fc_response: Instant,
     pub connected_to_fc: bool,
+    // todo: Use an enum for control mapping.
+    pub control_mapping_quad: ControlMappingQuad,
+    pub control_mapping_fixed_wing: ControlMappingFixedWing,
     interface: SerialInterface,
 }
 
@@ -107,6 +110,8 @@ impl Default for State {
             last_fc_response: Instant::now(), // todo: Perhaps a time in the distant past is more apt.
             connected_to_fc: false,
             interface: SerialInterface::new(),
+            control_mapping_quad: Default::default(),
+            control_mapping_fixed_wing: Default::default(),
         }
     }
 }
@@ -329,6 +334,44 @@ impl State {
         Ok(())
     }
 
+    /// Read motor or servo control mapping from the FC.
+    pub fn read_control_mapping(&mut self) -> Result<(), io::Error> {
+        // todo: DRY with port. Trouble passing it as a param due to box<dyn
+        let port = match self.interface.serial_port.as_mut() {
+            Some(p) => p,
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotConnected,
+                    "Flight controller not connected",
+                ))
+            }
+        };
+
+        let crc_tx = calc_crc(
+            &CRC_LUT,
+            &[MsgType::ReqWaypoints as u8],
+            MsgType::ReqWaypoints.payload_size() as u8 + 1,
+        );
+        let xmit_buf = &[MsgType::ReqControlMapping as u8, crc_tx];
+
+        port.write_all(xmit_buf)?;
+
+        let mut rx_buf = [0; CONTROL_MAPPING_QUAD_SIZE + 2];
+        port.read_exact(&mut rx_buf)?;
+
+        let mut buf = [0; CONTROL_MAPPING_QUAD_SIZE];
+        buf.clone_from_slice(&rx_buf[1..CONTROL_MAPPING_QUAD_SIZE + 1]);
+
+        let control_mapping = buf.into();
+
+        // todo: Fixed wing A/R.
+        self.control_mapping_quad = control_mapping;
+
+        // todo: Lat, Lon
+
+        Ok(())
+    }
+
     /// Request several types of data from the flight controller over USB serial. Return a struct
     /// containing the data.
     pub fn read_all(&mut self) -> Result<(), io::Error> {
@@ -351,7 +394,9 @@ impl State {
         self.read_sys_ap_status()?;
         self.read_controls()?;
         self.read_link_stats()?;
-        self.read_waypoints()?;
+        // todo: Put back; issue with it to correct.
+        // self.read_waypoints()?;
+        self.read_control_mapping()?;
 
         Ok(())
     }
@@ -573,6 +618,24 @@ fn waypoints_from_buf(w: [u8; WAYPOINTS_SIZE]) -> [Option<Location>; MAX_WAYPOIN
     }
 
     result
+}
+
+// todo: Fixed wing too
+impl From<[u8; CONTROL_MAPPING_QUAD_SIZE]> for ControlMappingQuad {
+    fn from(p: [u8; CONTROL_MAPPING_QUAD_SIZE]) -> Self {
+        println!("P: {:?}", p);
+        ControlMappingQuad {
+            m1: (p[0] & 0b11).try_into().unwrap(),
+            m2: ((p[0] >> 2) & 0b11).try_into().unwrap(),
+            m3: ((p[0] >> 4) & 0b11).try_into().unwrap(),
+            m4: ((p[0] >> 6) & 0b11).try_into().unwrap(),
+            m1_reversed: (p[1] & 1) != 0,
+            m2_reversed: ((p[1] >> 1) & 1) != 0,
+            m3_reversed: ((p[1] >> 2) & 1) != 0,
+            m4_reversed: ((p[1] >> 3) & 1) != 0,
+            frontleft_aftright_dir: ((p[1] >> 4) & 1).try_into().unwrap(),
+        }
+    }
 }
 
 #[derive(Debug)]
