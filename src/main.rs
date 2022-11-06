@@ -555,6 +555,7 @@ impl From<[u8; SYS_STATUS_SIZE]> for SystemStatus {
             esc_rpm: p[6].try_into().unwrap(),
             rf_control_link: p[7].try_into().unwrap(),
             rf_control_fault: p[8] != 0,
+            esc_rpm_fault: p[9] != 0,
         }
     }
 }

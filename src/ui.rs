@@ -2,12 +2,13 @@
 
 use std::f32::consts::TAU;
 
-use egui::{self, Button, Color32, ComboBox, CursorIcon::Default, RichText};
+use egui::ImageData::Color;
+use egui::{self, Button, Color32, ComboBox, CursorIcon::Default, RichText, Ui};
 
 use graphics::{EngineUpdates, Scene};
 
 use crate::{
-    types::{AircraftType, AltType, ArmStatus, SensorStatus, YawAssist},
+    types::{AircraftType, AltType, ArmStatus, LinkStats, SensorStatus, YawAssist},
     RotorPosition, State,
 };
 
@@ -23,7 +24,7 @@ const MOTOR_MAPPING_DROPDOWN_WIDTH: f32 = 100.;
 
 impl SensorStatus {
     // Note Not included in Corvus
-    fn to_str(&self) -> &str {
+    fn as_str(&self) -> &str {
         match self {
             Self::Pass => "Pass",
             Self::Fail => "Failure",
@@ -31,7 +32,7 @@ impl SensorStatus {
         }
     }
 
-    fn to_color(&self) -> Color32 {
+    fn as_color(&self) -> Color32 {
         match self {
             Self::Pass => Color32::LIGHT_GREEN,
             Self::Fail => Color32::LIGHT_RED,
@@ -42,14 +43,14 @@ impl SensorStatus {
 
 // todo: Fixed wing arm status as well
 impl ArmStatus {
-    fn to_str(&self) -> &str {
+    fn as_str(&self) -> &str {
         match self {
             Self::Armed => "Armed",
             Self::Disarmed => "Disarmed",
         }
     }
 
-    fn to_color(&self) -> Color32 {
+    fn as_color(&self) -> Color32 {
         match self {
             Self::Armed => Color32::YELLOW,
             Self::Disarmed => Color32::GREEN,
@@ -58,7 +59,7 @@ impl ArmStatus {
 }
 
 impl RotorPosition {
-    fn to_str(&self) -> &str {
+    fn as_str(&self) -> &str {
         match self {
             Self::FrontLeft => "Front left",
             Self::FrontRight => "Front right",
@@ -153,16 +154,16 @@ fn format_ap_bool(v: bool) -> String {
 }
 
 /// Add a sensor status indicator.
-fn add_sensor_status(label: &str, val: SensorStatus, ui: &mut egui::Ui) {
+fn add_sensor_status(label: &str, val: SensorStatus, ui: &mut Ui) {
     ui.vertical(|ui| {
         ui.label(label);
-        ui.label(RichText::new(val.to_str()).color(val.to_color()));
+        ui.label(RichText::new(val.as_str()).color(val.as_color()));
     });
     ui.add_space(SPACING_HORIZONTAL);
 }
 
 /// Add a progress bar displaying the current position of a control.
-fn add_control_disp(mut val: f32, text: &str, throttle: bool, ui: &mut egui::Ui) {
+fn add_control_disp(mut val: f32, text: &str, throttle: bool, ui: &mut Ui) {
     ui.label(text);
     // convert from -1. to 1. to 0. to 1.
     let v = if throttle { val / 2. + 0.5 } else { val };
@@ -179,7 +180,73 @@ fn add_control_disp(mut val: f32, text: &str, throttle: bool, ui: &mut egui::Ui)
     ui.add(bar);
 }
 
-fn add_not_connected_page(ui: &mut egui::Ui) {
+fn add_link_stats(link_stats: &LinkStats, ui: &mut Ui) {
+    // todo: convert things like tx power to actual power disp
+    ui.horizontal(|ui| {
+        ui.vertical(|ui| {
+            ui.label("Uplink RSSI 1");
+            ui.label(&link_stats.uplink_rssi_1.to_string());
+        });
+        ui.add_space(SPACING_HORIZONTAL_TIGHT);
+
+        // ui.vertical(|ui| {
+        //     ui.label("Uplink RSSI 2");
+        //     ui.label(&link_stats.uplink_rssi_2.to_string());
+        // });
+        // ui.add_space(SPACING_HORIZONTAL_TIGHT);
+
+        ui.vertical(|ui| {
+            ui.label("Link qual");
+            let val = &link_stats.uplink_link_quality;
+            ui.label(RichText::new(val.to_string()).color(link_qual_to_color(*val)));
+        });
+        ui.add_space(SPACING_HORIZONTAL_TIGHT);
+
+        ui.vertical(|ui| {
+            ui.label("Uplink SNR");
+            ui.label(&link_stats.uplink_snr.to_string());
+        });
+        ui.add_space(SPACING_HORIZONTAL_TIGHT);
+
+        // ui.vertical(|ui| {
+        //     ui.label("Active antenna");
+        //     ui.label(&link_stats.active_antenna.to_string());
+        // });
+        // ui.add_space(SPACING_HORIZONTAL_TIGHT);
+
+        ui.vertical(|ui| {
+            ui.label("RF mode");
+            ui.label(&link_stats.rf_mode.to_string());
+        });
+        ui.add_space(SPACING_HORIZONTAL);
+
+        ui.vertical(|ui| {
+            ui.label("Uplink Tx pwr");
+            ui.label(&tx_pwr_from_val(link_stats.uplink_tx_power));
+        });
+        ui.add_space(SPACING_HORIZONTAL_TIGHT);
+
+        ui.vertical(|ui| {
+            ui.label("Downlink RSSI");
+            ui.label(&link_stats.downlink_rssi.to_string());
+        });
+        ui.add_space(SPACING_HORIZONTAL_TIGHT);
+
+        ui.vertical(|ui| {
+            ui.label("Downlink link qual");
+            let val = &link_stats.downlink_link_quality;
+            ui.label(RichText::new(val.to_string()).color(link_qual_to_color(*val)));
+        });
+        ui.add_space(SPACING_HORIZONTAL_TIGHT);
+
+        ui.vertical(|ui| {
+            ui.label("Downlink SNR");
+            ui.label(&link_stats.downlink_snr.to_string());
+        });
+    });
+}
+
+fn add_not_connected_page(ui: &mut Ui) {
     let text = "No data received from the flight controller";
     ui.heading(RichText::new(text).color(Color32::GOLD).size(60.));
     ui.add_space(300.); // So not aligned to bottom of the window.
@@ -266,71 +333,77 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
         ui.add_space(SPACE_BETWEEN_SECTIONS);
 
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.heading("Sensors");
+        ui.vertical(|ui| {
+            ui.heading("Sensors");
 
-                ui.horizontal(|ui| {
-                    // todo: Center these.
-                    ui.vertical(|ui| {
-                        ui.label("Altitude baro:");
-                        ui.label(&(state.altitude_baro.to_string() + " m"));
-                    });
-
-                    if state.altitude_agl.is_some() {
-                        ui.vertical(|ui| {
-                            ui.label("Altitude AGL:");
-                            ui.label(&agl);
-                        });
-                    }
-
-                    ui.vertical(|ui| {
-                        ui.label("Battery V:");
-                        ui.label(&state.batt_v.to_string());
-                    });
-
-                    ui.vertical(|ui| {
-                        ui.label("ESC current (A):");
-                        ui.label(&state.current.to_string());
-                    });
-
-                    if state.lat.is_some() && state.lon.is_some() {
-                        // todo: Separate PPKS section A/r
-                        ui.vertical(|ui| {
-                            ui.label("Latitude:");
-                            ui.label(lat);
-                        });
-
-                        ui.vertical(|ui| {
-                            ui.label("Longitude:");
-                            ui.label(lon);
-                        });
-                    } else {
-                        // ui.label("GNSS not connected)");
-                        // ui.label(""); // Spacer
-                    }
+            ui.horizontal(|ui| {
+                // todo: Center these.
+                ui.vertical(|ui| {
+                    ui.label("Altitude baro:");
+                    ui.label(&(state.altitude_baro.to_string() + " m"));
                 });
+
+                if state.altitude_agl.is_some() {
+                    ui.vertical(|ui| {
+                        ui.label("Altitude AGL:");
+                        ui.label(&agl);
+                    });
+                }
+
+                ui.vertical(|ui| {
+                    ui.label("Battery V:");
+                    ui.label(&state.batt_v.to_string());
+                });
+
+                ui.vertical(|ui| {
+                    ui.label("ESC current (A):");
+                    ui.label(&state.current.to_string());
+                });
+
+                if state.lat.is_some() && state.lon.is_some() {
+                    // todo: Separate PPKS section A/r
+                    ui.vertical(|ui| {
+                        ui.label("Latitude:");
+                        ui.label(lat);
+                    });
+
+                    ui.vertical(|ui| {
+                        ui.label("Longitude:");
+                        ui.label(lon);
+                    });
+                } else {
+                    // ui.label("GNSS not connected)");
+                    // ui.label(""); // Spacer
+                }
             });
 
-            ui.add_space(80.);
+            ui.add_space(SPACE_BETWEEN_SECTIONS);
 
             ui.vertical(|ui| {
                 ui.heading("Control commands");
-                // ui.horizontal(|ui| {
 
-                add_control_disp(state.controls.pitch, "Pitch", true, ui);
-                add_control_disp(state.controls.roll, "Roll", true, ui);
-                add_control_disp(state.controls.yaw, "Yaw", true, ui);
-                add_control_disp(state.controls.throttle, "Throttle", false, ui);
+                if state.system_status.rf_control_link == SensorStatus::Pass {
+                    ui.horizontal(|ui| {
+                        add_control_disp(state.controls.pitch, "Pitch", true, ui);
+                        add_control_disp(state.controls.roll, "Roll", true, ui);
+                    });
+                    ui.horizontal(|ui| {
+                        add_control_disp(state.controls.yaw, "Yaw", true, ui);
+                        add_control_disp(state.controls.throttle, "Throttle", false, ui);
+                    });
 
-                // todo Important: This isn't the actual arm status state! It's the control input!
-                // todo: Potentially misleading.
-                ui.vertical(|ui| {
-                    ui.label("Motor arm switch");
-                    let val = state.controls.arm_status;
-                    ui.label(RichText::new(val.to_str()).color(val.to_color()));
-                });
-                // });
+                    // todo Important: This isn't the actual arm status state! It's the control input!
+                    // todo: Potentially misleading.
+                    ui.vertical(|ui| {
+                        ui.label("Motor arm switch");
+                        let val = state.controls.arm_status;
+                        ui.label(RichText::new(val.as_str()).color(val.as_color()));
+                    });
+                } else {
+                    ui.heading(
+                        RichText::new("(Radio control link not connected)").color(Color32::GOLD),
+                    );
+                }
             });
         });
 
@@ -342,69 +415,11 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
         // todo: Evaluate which of these you want.
         // todo: RSSI 2, antenna etc A/R only if full diversity
 
-        // todo: convert things like tx power to actual power disp
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.label("Uplink RSSI 1");
-                ui.label(&state.link_stats.uplink_rssi_1.to_string());
-            });
-            ui.add_space(SPACING_HORIZONTAL_TIGHT);
-
-            // ui.vertical(|ui| {
-            //     ui.label("Uplink RSSI 2");
-            //     ui.label(&state.link_stats.uplink_rssi_2.to_string());
-            // });
-            // ui.add_space(SPACING_HORIZONTAL_TIGHT);
-
-            ui.vertical(|ui| {
-                ui.label("Link qual");
-                let val = &state.link_stats.uplink_link_quality;
-                ui.label(RichText::new(val.to_string()).color(link_qual_to_color(*val)));
-            });
-            ui.add_space(SPACING_HORIZONTAL_TIGHT);
-
-            ui.vertical(|ui| {
-                ui.label("Uplink SNR");
-                ui.label(&state.link_stats.uplink_snr.to_string());
-            });
-            ui.add_space(SPACING_HORIZONTAL_TIGHT);
-
-            // ui.vertical(|ui| {
-            //     ui.label("Active antenna");
-            //     ui.label(&state.link_stats.active_antenna.to_string());
-            // });
-            // ui.add_space(SPACING_HORIZONTAL_TIGHT);
-
-            ui.vertical(|ui| {
-                ui.label("RF mode");
-                ui.label(&state.link_stats.rf_mode.to_string());
-            });
-            ui.add_space(SPACING_HORIZONTAL);
-
-            ui.vertical(|ui| {
-                ui.label("Uplink Tx pwr");
-                ui.label(&tx_pwr_from_val(state.link_stats.uplink_tx_power));
-            });
-            ui.add_space(SPACING_HORIZONTAL_TIGHT);
-
-            ui.vertical(|ui| {
-                ui.label("Downlink RSSI");
-                ui.label(&state.link_stats.downlink_rssi.to_string());
-            });
-            ui.add_space(SPACING_HORIZONTAL_TIGHT);
-
-            ui.vertical(|ui| {
-                ui.label("Downlink link qual");
-                let val = &state.link_stats.downlink_link_quality;
-                ui.label(RichText::new(val.to_string()).color(link_qual_to_color(*val)));
-            });
-            ui.add_space(SPACING_HORIZONTAL_TIGHT);
-
-            ui.vertical(|ui| {
-                ui.label("Downlink SNR");
-                ui.label(&state.link_stats.downlink_snr.to_string());
-            });
-        });
+        if state.system_status.rf_control_link == SensorStatus::Pass {
+            add_link_stats(&state.link_stats, ui);
+        } else {
+            ui.heading(RichText::new("(Radio control link not connected)").color(Color32::GOLD));
+        }
 
         ui.add_space(SPACE_BETWEEN_SECTIONS);
 
@@ -484,7 +499,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                         // todo: For now, only set up for quad
                         ui.vertical(|ui| {
                             ui.label("Motor 1");
-                            ui.label(state.control_mapping_quad.m1.to_str());
+                            ui.label(state.control_mapping_quad.m1.as_str());
 
                             let mut selected = &mut state.control_mapping_quad.m1_reversed;
                             ComboBox::from_id_source(0)
@@ -499,7 +514,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
                         ui.vertical(|ui| {
                             ui.label("Motor 2");
-                            ui.label(state.control_mapping_quad.m1.to_str());
+                            ui.label(state.control_mapping_quad.m1.as_str());
 
                             let mut selected = &mut state.control_mapping_quad.m2_reversed;
                             ComboBox::from_id_source(1)
@@ -514,7 +529,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
                         ui.vertical(|ui| {
                             ui.label("Motor 3");
-                            ui.label(state.control_mapping_quad.m1.to_str());
+                            ui.label(state.control_mapping_quad.m1.as_str());
 
                             let mut selected = &mut state.control_mapping_quad.m3_reversed;
                             ComboBox::from_id_source(2)
@@ -529,7 +544,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
                         ui.vertical(|ui| {
                             ui.label("Motor 4");
-                            ui.label(state.control_mapping_quad.m1.to_str());
+                            ui.label(state.control_mapping_quad.m1.as_str());
 
                             let mut selected = &mut state.control_mapping_quad.m4_reversed;
                             ComboBox::from_id_source(3)
@@ -547,28 +562,28 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                         // todo: For now, only set up for quad
                         ui.vertical(|ui| {
                             ui.label("Motor 1");
-                            ui.label(state.control_mapping_quad.m1.to_str());
+                            ui.label(state.control_mapping_quad.m1.as_str());
                             ui.label(motor_dir_format(state.control_mapping_quad.m1_reversed));
                         });
                         ui.add_space(SPACING_HORIZONTAL);
 
                         ui.vertical(|ui| {
                             ui.label("Motor 2");
-                            ui.label(state.control_mapping_quad.m2.to_str());
+                            ui.label(state.control_mapping_quad.m2.as_str());
                             ui.label(motor_dir_format(state.control_mapping_quad.m2_reversed));
                         });
                         ui.add_space(SPACING_HORIZONTAL);
 
                         ui.vertical(|ui| {
                             ui.label("Motor 3");
-                            ui.label(state.control_mapping_quad.m3.to_str());
+                            ui.label(state.control_mapping_quad.m3.as_str());
                             ui.label(motor_dir_format(state.control_mapping_quad.m3_reversed));
                         });
                         ui.add_space(SPACING_HORIZONTAL);
 
                         ui.vertical(|ui| {
                             ui.label("Motor 4");
-                            ui.label(state.control_mapping_quad.m4.to_str());
+                            ui.label(state.control_mapping_quad.m4.as_str());
                             ui.label(motor_dir_format(state.control_mapping_quad.m4_reversed));
                         });
                         ui.add_space(SPACING_HORIZONTAL);
