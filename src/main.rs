@@ -35,7 +35,7 @@ const TIMEOUT_MILIS: u64 = 10;
 // todo without explicitly requesting here?
 // todo: Also: multiple intervals for different sorts of data, eg update
 // todo attitude at a higher rate than other things.
-const READ_INTERVAL: f32 = 0.1;
+const READ_INTERVAL: f32 = 0.01;
 const READ_INTERVAL_MS: u128 = (READ_INTERVAL * 1_000.) as u128;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -159,6 +159,33 @@ impl Default for State {
     }
 }
 
+/// C+P from firmware, with minor changes.
+fn send_payload<const N: usize>(
+    msg_type: MsgType,
+    payload: &[u8],
+    port: &mut Box<dyn SerialPort>,
+) -> Result<(), io::Error> {
+    // N is the packet size.
+    let payload_size = msg_type.payload_size();
+
+    let mut tx_buf = [0; N];
+
+    tx_buf[0] = msg_type as u8;
+    tx_buf[1..(payload_size + 1)].copy_from_slice(&payload);
+
+    tx_buf[payload_size + 1] = calc_crc(
+        &CRC_LUT,
+        &tx_buf[..payload_size + 1],
+        payload_size as u8 + 1,
+    );
+
+    port.write_all(&tx_buf)?;
+
+    Ok(())
+}
+
+// todo: `receive_payload` as well.
+
 impl State {
     /// Read parameters, such as attitude and altitutde
     // pub fn read_params(&mut self, port: &Box<dyn SerialPort>) -> Result<(), io::Error> {
@@ -174,15 +201,7 @@ impl State {
             }
         };
 
-        let crc_tx = calc_crc(
-            &CRC_LUT,
-            &[MsgType::ReqParams as u8],
-            MsgType::ReqParams.payload_size() as u8 + 1,
-        );
-        let xmit_buf = &[MsgType::ReqParams as u8, crc_tx];
-
-        // Write the buffer requesting params from the FC.
-        port.write_all(xmit_buf)?;
+        send_payload::<{ 2 }>(MsgType::ReqParams, &[], port)?;
 
         // Read the params passed by the FC in response.
         let mut rx_buf = [0; PARAMS_SIZE + 2];
@@ -221,16 +240,19 @@ impl State {
         self.current = f32::from_be_bytes(rx_buf[i..F32_SIZE + i].try_into().unwrap());
         i += F32_SIZE;
 
-        // todo: CRC check on other items, and impl it here.
         // todo: Probably return a suitable error type here.
-        let payload_size = MsgType::ReqParams.payload_size();
+        let payload_size_rx = MsgType::Params.payload_size();
         let crc_rx_expected = calc_crc(
             &CRC_LUT,
-            &rx_buf[..payload_size + 1],
-            payload_size as u8 + 1,
+            &rx_buf[..payload_size_rx + 1],
+            payload_size_rx as u8 + 1,
         );
 
-        let crc_read = rx_buf[PARAMS_SIZE] + 1;
+        if rx_buf[PARAMS_SIZE] == 255 {
+            println!("Overflow on CRC (CRC = 255. Is this OK?");
+        }
+
+        let crc_read = rx_buf[PARAMS_SIZE + 1];
         if crc_read != crc_rx_expected {
             // todo: Do something else here? Eg don't update self and resend.
             println!("Incorrect CRC from reading params!");
@@ -253,14 +275,7 @@ impl State {
             }
         };
 
-        let crc_tx = calc_crc(
-            &CRC_LUT,
-            &[MsgType::ReqSysApStatus as u8],
-            MsgType::ReqSysApStatus.payload_size() as u8 + 1,
-        );
-        let xmit_buf = &[MsgType::ReqSysApStatus as u8, crc_tx];
-
-        port.write_all(xmit_buf)?;
+        send_payload::<{ 2 }>(MsgType::ReqSysApStatus, &[], port)?;
 
         // todo: Just sys status for now; do AP too.
         let mut rx_buf = [0; SYS_AP_STATUS_SIZE + 2];
@@ -269,6 +284,25 @@ impl State {
         let sys_status: [u8; SYS_AP_STATUS_SIZE] =
             rx_buf[1..SYS_AP_STATUS_SIZE + 1].try_into().unwrap();
         self.system_status = sys_status.into();
+
+        // todo: Probably return a suitable error type here.
+        // todo DRY
+        let payload_size_rx = MsgType::SysApStatus.payload_size();
+        let crc_rx_expected = calc_crc(
+            &CRC_LUT,
+            &rx_buf[..payload_size_rx + 1],
+            payload_size_rx as u8 + 1,
+        );
+
+        if rx_buf[SYS_AP_STATUS_SIZE] == 255 {
+            println!("Overflow on CRC (CRC = 255. Is this OK?");
+        }
+
+        let crc_read = rx_buf[SYS_AP_STATUS_SIZE + 1];
+        if crc_read != crc_rx_expected {
+            // todo: Do something else here? Eg don't update self and resend.
+            println!("Incorrect CRC from reading sys AP status!");
+        }
 
         Ok(())
     }
@@ -287,14 +321,7 @@ impl State {
             }
         };
 
-        let crc_tx = calc_crc(
-            &CRC_LUT,
-            &[MsgType::ReqControls as u8],
-            MsgType::ReqControls.payload_size() as u8 + 1,
-        );
-        let xmit_buf = &[MsgType::ReqControls as u8, crc_tx];
-
-        port.write_all(xmit_buf)?;
+        send_payload::<{ 2 }>(MsgType::ReqControls, &[], port)?;
 
         // let mut rx_buf = [0; CONTROLS_SIZE + 2]; // todo: Bogus leading 1?
         let mut rx_buf = [0; CONTROLS_SIZE + 2];
@@ -302,6 +329,24 @@ impl State {
 
         let controls: [u8; CONTROLS_SIZE] = rx_buf[1..CONTROLS_SIZE + 1].try_into().unwrap();
         self.controls = controls.into();
+
+                // todo: Probably return a suitable error type here.
+        let payload_size_rx = MsgType::Controls.payload_size();
+        let crc_rx_expected = calc_crc(
+            &CRC_LUT,
+            &rx_buf[..payload_size_rx + 1],
+            payload_size_rx as u8 + 1,
+        );
+
+        if rx_buf[CONTROLS_SIZE] == 255 {
+            println!("Overflow on CRC (CRC = 255. Is this OK?");
+        }
+
+        let crc_read = rx_buf[CONTROLS_SIZE + 1];
+        if crc_read != crc_rx_expected {
+            // todo: Do something else here? Eg don't update self and resend.
+            println!("Incorrect CRC from reading controls!");
+        }
 
         Ok(())
     }
@@ -320,15 +365,7 @@ impl State {
             }
         };
 
-        let crc_tx = calc_crc(
-            &CRC_LUT,
-            &[MsgType::ReqLinkStats as u8],
-            MsgType::ReqLinkStats.payload_size() as u8 + 1,
-        );
-        let xmit_buf = &[MsgType::ReqLinkStats as u8, crc_tx];
-
-        // todo: DRY between these calls
-        port.write_all(xmit_buf)?;
+        send_payload::<{ 2 }>(MsgType::ReqLinkStats, &[], port)?;
 
         let mut rx_buf = [0; LINK_STATS_SIZE + 2];
         port.read_exact(&mut rx_buf)?;
@@ -336,6 +373,24 @@ impl State {
         let link_stats: [u8; LINK_STATS_SIZE] = rx_buf[1..LINK_STATS_SIZE + 1].try_into().unwrap();
 
         self.link_stats = link_stats.into();
+
+                // todo: Probably return a suitable error type here.
+        let payload_size_rx = MsgType::LinkStats.payload_size();
+        let crc_rx_expected = calc_crc(
+            &CRC_LUT,
+            &rx_buf[..payload_size_rx + 1],
+            payload_size_rx as u8 + 1,
+        );
+
+        if rx_buf[LINK_STATS_SIZE] == 255 {
+            println!("Overflow on CRC (CRC = 255. Is this OK?");
+        }
+
+        let crc_read = rx_buf[LINK_STATS_SIZE + 1];
+        if crc_read != crc_rx_expected {
+            // todo: Do something else here? Eg don't update self and resend.
+            println!("Incorrect CRC from reading link stats!");
+        }
 
         Ok(())
     }
@@ -354,14 +409,7 @@ impl State {
             }
         };
 
-        let crc_tx = calc_crc(
-            &CRC_LUT,
-            &[MsgType::ReqWaypoints as u8],
-            MsgType::ReqWaypoints.payload_size() as u8 + 1,
-        );
-        let xmit_buf = &[MsgType::ReqWaypoints as u8, crc_tx];
-
-        port.write_all(xmit_buf)?;
+        send_payload::<{ 2 }>(MsgType::ReqWaypoints, &[], port)?;
 
         let mut rx_buf = [0; WAYPOINTS_SIZE + 2];
         port.read_exact(&mut rx_buf)?;
@@ -391,14 +439,7 @@ impl State {
             }
         };
 
-        let crc_tx = calc_crc(
-            &CRC_LUT,
-            &[MsgType::ReqWaypoints as u8],
-            MsgType::ReqWaypoints.payload_size() as u8 + 1,
-        );
-        let xmit_buf = &[MsgType::ReqControlMapping as u8, crc_tx];
-
-        port.write_all(xmit_buf)?;
+        send_payload::<{ 2 }>(MsgType::ReqControlMapping, &[], port)?;
 
         let mut rx_buf = [0; CONTROL_MAPPING_QUAD_SIZE + 2];
         port.read_exact(&mut rx_buf)?;
@@ -429,6 +470,7 @@ impl State {
             }
         };
 
+
         // self.read_params(port)?;
         // self.read_controls(port)?;
         // self.read_link_stats(port)?;
@@ -449,16 +491,7 @@ impl State {
 
     pub fn send_arm_command(&mut self) -> Result<(), io::Error> {
         if let Some(port) = self.interface.serial_port.as_mut() {
-            let msg_type = MsgType::ArmMotors;
-            let crc = calc_crc(
-                &CRC_LUT,
-                &[msg_type as u8],
-                msg_type.payload_size() as u8 + 1,
-            );
-            let xmit_buf = &[msg_type as u8, crc];
-            port.write_all(xmit_buf)?;
-
-            Ok(())
+            send_payload::<{ 2 }>(MsgType::ArmMotors, &[], port)
         } else {
             Err(io::Error::new(
                 io::ErrorKind::NotConnected,
@@ -469,17 +502,7 @@ impl State {
 
     pub fn send_disarm_command(&mut self) -> Result<(), io::Error> {
         if let Some(port) = self.interface.serial_port.as_mut() {
-            let msg_type = MsgType::DisarmMotors;
-            let crc = calc_crc(
-                &CRC_LUT,
-                &[msg_type as u8],
-                msg_type.payload_size() as u8 + 1,
-            );
-
-            let xmit_buf = &[msg_type as u8, crc];
-            port.write_all(xmit_buf)?;
-
-            Ok(())
+            send_payload::<{ 2 }>(MsgType::DisarmMotors, &[], port)
         } else {
             Err(io::Error::new(
                 io::ErrorKind::NotConnected,
@@ -491,17 +514,7 @@ impl State {
     // todo: These are incomplete. you need to pass which motor etc.
     pub fn send_start_motor_command(&mut self, motor: RotorPosition) -> Result<(), io::Error> {
         if let Some(port) = self.interface.serial_port.as_mut() {
-            let msg_type = MsgType::StartMotor;
-            let crc = calc_crc(
-                &CRC_LUT,
-                &[msg_type as u8],
-                msg_type.payload_size() as u8 + 1,
-            );
-
-            let xmit_buf = &[msg_type as u8, motor as u8, crc];
-            port.write_all(xmit_buf)?;
-
-            Ok(())
+            send_payload::<{ 3 }>(MsgType::StartMotor, &[motor as u8], port)
         } else {
             Err(io::Error::new(
                 io::ErrorKind::NotConnected,
@@ -512,16 +525,7 @@ impl State {
 
     pub fn send_stop_motor_command(&mut self, motor: RotorPosition) -> Result<(), io::Error> {
         if let Some(port) = self.interface.serial_port.as_mut() {
-            let msg_type = MsgType::StopMotor;
-            let crc = calc_crc(
-                &CRC_LUT,
-                &[msg_type as u8],
-                msg_type.payload_size() as u8 + 1,
-            );
-            let xmit_buf = &[msg_type as u8, motor as u8, crc];
-            port.write_all(xmit_buf)?;
-
-            Ok(())
+            send_payload::<{ 3 }>(MsgType::StopMotor, &[motor as u8], port)
         } else {
             Err(io::Error::new(
                 io::ErrorKind::NotConnected,
@@ -536,27 +540,16 @@ impl State {
         value: f32,
     ) -> Result<(), io::Error> {
         if let Some(port) = self.interface.serial_port.as_mut() {
-            let msg_type = MsgType::SetServoPosit;
-            let crc = calc_crc(
-                &CRC_LUT,
-                &[msg_type as u8],
-                msg_type.payload_size() as u8 + 1,
-            );
-
             let v = value.to_be_bytes();
-            let xmit_buf = &[
-                msg_type as u8,
+            let payload = [
                 servo_posit as u8,
                 v[0],
                 v[1],
                 v[2],
                 v[3],
-                crc,
             ];
 
-            port.write_all(xmit_buf)?;
-
-            Ok(())
+            send_payload::<{ SET_SERVO_POSIT_SIZE + 2 }>(MsgType::SetServoPosit, &payload, port)
         } else {
             Err(io::Error::new(
                 io::ErrorKind::NotConnected,
@@ -723,9 +716,11 @@ impl SerialInterface {
                             {
                                 // }
                                 Ok(port) => {
+                                    // println!("(No access error)");
                                     return Self {
                                         serial_port: Some(port),
                                     };
+
                                 }
                                 Err(serialport::Error { kind, description }) => {
                                     match kind {
@@ -733,7 +728,9 @@ impl SerialInterface {
                                         //     println!("IO error openin the port");
                                         // }
                                         serialport::ErrorKind::NoDevice => {
-                                            println!("No device: {:?}", description);
+                                            // todo: Probably still getting this, but it seems to not
+                                            // todo be a dealbreaker. Eventually deal with it.
+                                            // println!("No device: {:?}", description);
                                         }
                                         _ => {
                                             println!(

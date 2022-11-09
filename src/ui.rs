@@ -255,6 +255,7 @@ fn add_not_connected_page(ui: &mut Ui) {
 
 /// Returns an estimate of battery life, with 0. being empty, and 1. being full.
 /// Input is in volts.
+/// [Reference with table](https://blog.ampow.com/lipo-voltage-chart/)
 fn batt_left_from_v(v: f32, cell_count: BattCellCount) -> f32 {
     let per_cell = v / cell_count.num_cells();
     // todo: Temp. Refine this.
@@ -264,6 +265,22 @@ fn batt_left_from_v(v: f32, cell_count: BattCellCount) -> f32 {
     // todo. Not linear! Just for now.
 
     (per_cell - empty_v) / (full_v - empty_v)
+}
+
+/// Charge is on a scale of 0. to 1.
+fn batt_charge_to_color(charge: f32) -> Color32 {
+    let min_color = (1., 0., 0.);
+
+    let max_color = (0., 1., 0.);
+
+    // We are cheating a bit here, knowing our results are both pure channels...
+
+    let r = ((1. - charge) * 255.) as u8;
+    let g = (charge * 255.) as u8;
+    let b = 0;
+
+
+    Color32::from_rgb(r, g, b)
 }
 
 pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineUpdates {
@@ -385,16 +402,19 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                 // todo: Add user-selectable battery cell field. Have this save somewhere
                 // todo on the computer.
                 // todo: Color-code appropriately.
+                let batt_life = batt_left_from_v(state.batt_v, state.batt_cell_count);
                 ui.vertical(|ui| {
                     ui.label("Batt Volts:");
-                    ui.label(format!("{:.1}", &state.batt_v));
+                    // ui.label(format!("{:.1}", &state.batt_v));
+                    ui.label(RichText::new(format!("{:.1}", state.batt_v)).color(batt_charge_to_color(batt_life)));
                 });
                 ui.add_space(SPACING_HORIZONTAL);
 
+                // tood: COlor the bar.
                 ui.vertical(|ui| {
                     ui.label("Batt Life");
                     let bar =
-                        ProgressBar::new(batt_left_from_v(state.batt_v, state.batt_cell_count))
+                        ProgressBar::new(batt_life)
                             .desired_width(BATT_LIFE_WIDTH);
                     ui.add(bar);
                 });
