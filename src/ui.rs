@@ -3,13 +3,13 @@
 use std::f32::consts::TAU;
 
 use egui::ImageData::Color;
-use egui::{self, Button, Color32, ComboBox, CursorIcon::Default, RichText, Ui};
+use egui::{self, Button, Color32, ComboBox, CursorIcon::Default, ProgressBar, RichText, Ui};
 
 use graphics::{EngineUpdates, Scene};
 
 use crate::{
     types::{AircraftType, AltType, ArmStatus, LinkStats, SensorStatus, YawAssist},
-    RotorPosition, State,
+    BattCellCount, RotorPosition, State,
 };
 
 // pub const UI_PANEL_SIZE: f32 = 1_600.;
@@ -20,6 +20,7 @@ const SPACE_BETWEEN_SECTIONS: f32 = 30.;
 const SPACING_HORIZONTAL: f32 = 26.;
 const SPACING_HORIZONTAL_TIGHT: f32 = 16.;
 const CONTROL_BAR_WIDTH: f32 = 200.; // eg pitch, roll, yaw, throttle control.
+const BATT_LIFE_WIDTH: f32 = 200.; // eg pitch, roll, yaw, throttle control.
 const MOTOR_MAPPING_DROPDOWN_WIDTH: f32 = 100.;
 
 impl SensorStatus {
@@ -167,7 +168,7 @@ fn add_control_disp(mut val: f32, text: &str, throttle: bool, ui: &mut Ui) {
     ui.label(text);
     // convert from -1. to 1. to 0. to 1.
     let v = if throttle { val / 2. + 0.5 } else { val };
-    let bar = egui::ProgressBar::new(v).desired_width(CONTROL_BAR_WIDTH);
+    let bar = ProgressBar::new(v).desired_width(CONTROL_BAR_WIDTH);
     // let range = if throttle {
     //     0.0..=0.1
     // } else {
@@ -250,6 +251,19 @@ fn add_not_connected_page(ui: &mut Ui) {
     let text = "No data received from the flight controller";
     ui.heading(RichText::new(text).color(Color32::GOLD).size(60.));
     ui.add_space(300.); // So not aligned to bottom of the window.
+}
+
+/// Returns an estimate of battery life, with 0. being empty, and 1. being full.
+/// Input is in volts.
+fn batt_left_from_v(v: f32, cell_count: BattCellCount) -> f32 {
+    let per_cell = v / cell_count.num_cells();
+    // todo: Temp. Refine this.
+    let empty_v = 3.5;
+    let full_v = 4.2;
+
+    // todo. Not linear! Just for now.
+
+    (per_cell - empty_v) / (full_v - empty_v)
 }
 
 pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineUpdates {
@@ -342,23 +356,55 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                     ui.label("Altitude baro:");
                     ui.label(&(state.altitude_baro.to_string() + " m"));
                 });
+                ui.add_space(SPACING_HORIZONTAL);
 
                 if state.altitude_agl.is_some() {
                     ui.vertical(|ui| {
                         ui.label("Altitude AGL:");
                         ui.label(&agl);
                     });
+                    ui.add_space(SPACING_HORIZONTAL);
                 }
 
                 ui.vertical(|ui| {
-                    ui.label("Battery V:");
-                    ui.label(&state.batt_v.to_string());
+                    ui.label("Batt cell count:");
+                    let selected = &mut state.batt_cell_count;
+                    ComboBox::from_id_source(0)
+                        .width(60.)
+                        .selected_text(selected.as_str())
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(selected, BattCellCount::S2, "2S");
+                            ui.selectable_value(selected, BattCellCount::S3, "3S");
+                            ui.selectable_value(selected, BattCellCount::S4, "4S");
+                            ui.selectable_value(selected, BattCellCount::S6, "6S");
+                            ui.selectable_value(selected, BattCellCount::S8, "8S");
+                        });
                 });
+                ui.add_space(SPACING_HORIZONTAL);
+
+                // todo: Add user-selectable battery cell field. Have this save somewhere
+                // todo on the computer.
+                // todo: Color-code appropriately.
+                ui.vertical(|ui| {
+                    ui.label("Batt Volts:");
+                    ui.label(format!("{:.1}", &state.batt_v));
+                });
+                ui.add_space(SPACING_HORIZONTAL);
+
+                ui.vertical(|ui| {
+                    ui.label("Batt Life");
+                    let bar =
+                        ProgressBar::new(batt_left_from_v(state.batt_v, state.batt_cell_count))
+                            .desired_width(BATT_LIFE_WIDTH);
+                    ui.add(bar);
+                });
+                ui.add_space(SPACING_HORIZONTAL);
 
                 ui.vertical(|ui| {
                     ui.label("ESC current (A):");
-                    ui.label(&state.current.to_string());
+                    ui.label(format!("{:.1}", &state.current));
                 });
+                ui.add_space(SPACING_HORIZONTAL);
 
                 if state.lat.is_some() && state.lon.is_some() {
                     // todo: Separate PPKS section A/r

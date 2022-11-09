@@ -38,6 +38,44 @@ const TIMEOUT_MILIS: u64 = 10;
 const READ_INTERVAL: f32 = 0.1;
 const READ_INTERVAL_MS: u128 = (READ_INTERVAL * 1_000.) as u128;
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum BattCellCount {
+    S2,
+    S3,
+    S4,
+    S6,
+    S8,
+}
+
+impl Default for BattCellCount {
+    fn default() -> Self {
+        Self::S4
+    }
+}
+
+impl BattCellCount {
+    pub fn num_cells(&self) -> f32 {
+        // float since it interacts with floats.
+        match self {
+            Self::S2 => 2.,
+            Self::S3 => 3.,
+            Self::S4 => 4.,
+            Self::S6 => 6.,
+            Self::S8 => 8.,
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::S2 => "2S",
+            Self::S3 => "3S",
+            Self::S4 => "4S",
+            Self::S6 => "6S",
+            Self::S8 => "8S",
+        }
+    }
+}
+
 /// Data passed by the flight controller
 pub struct State {
     pub attitude: Quaternion,
@@ -74,6 +112,7 @@ pub struct State {
     pub control_mapping_fixed_wing: ControlMappingFixedWing,
     // todo: ui_state field?
     pub editing_motor_mapping: bool,
+    pub batt_cell_count: BattCellCount,
     interface: SerialInterface,
 }
 
@@ -114,6 +153,7 @@ impl Default for State {
             control_mapping_quad: Default::default(),
             control_mapping_fixed_wing: Default::default(),
             editing_motor_mapping: false,
+            batt_cell_count: Default::default(),
             interface: SerialInterface::new(),
         }
     }
@@ -189,6 +229,7 @@ impl State {
             &rx_buf[..payload_size + 1],
             payload_size as u8 + 1,
         );
+
         let crc_read = rx_buf[PARAMS_SIZE] + 1;
         if crc_read != crc_rx_expected {
             // todo: Do something else here? Eg don't update self and resend.
