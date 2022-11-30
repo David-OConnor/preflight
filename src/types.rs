@@ -7,7 +7,7 @@ pub const CRC_LUT: [u8; 256] = crc_init(CRC_POLY);
 
 pub const QUATERNION_SIZE: usize = F32_SIZE * 4; // Quaternion (4x4 + altimeter + voltage reading + current reading)
 pub const PARAMS_SIZE: usize = 2 * QUATERNION_SIZE + 4 * F32_SIZE + 1; //
-pub const CONTROLS_SIZE: usize = 18;
+pub const CONTROLS_SIZE: usize = 19;
 pub const LINK_STATS_SIZE: usize = 5; // Only the first 4 fields.
 
 pub const MAX_WAYPOINTS: usize = 30;
@@ -15,7 +15,7 @@ pub const WAYPOINT_SIZE: usize = F32_SIZE * 3 + WAYPOINT_MAX_NAME_LEN + 1;
 pub const WAYPOINTS_SIZE: usize = MAX_WAYPOINTS * WAYPOINT_SIZE;
 pub const SET_SERVO_POSIT_SIZE: usize = 1 + F32_SIZE;
 pub const WAYPOINT_MAX_NAME_LEN: usize = 7;
-pub const SYS_STATUS_SIZE: usize = 10;
+pub const SYS_STATUS_SIZE: usize = 11;
 pub const AP_STATUS_SIZE: usize = 0; // todo
 pub const SYS_AP_STATUS_SIZE: usize = SYS_STATUS_SIZE + AP_STATUS_SIZE;
 pub const CONTROL_MAPPING_QUAD_SIZE: usize = 2; // For quad only atm. Address this.
@@ -67,7 +67,7 @@ impl Default for ArmStatus {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, TryFromPrimitive)]
+#[derive(Clone, Copy, Eq, PartialEq, TryFromPrimitive, Debug)]
 #[repr(u8)]
 pub enum MsgType {
     Params = 0,
@@ -320,6 +320,7 @@ pub struct SystemStatus {
     pub esc_telemetry: SensorStatus,
     pub esc_rpm: SensorStatus,
     pub rf_control_link: SensorStatus,
+    pub flash_spi: SensorStatus,
     pub rf_control_fault: bool,
     pub esc_rpm_fault: bool,
 }
@@ -463,4 +464,43 @@ pub struct ControlMappingFixedWing {
     /// control surface reality, but keeps things simple, and should be good enough to start.
     pub servo_high: f32,
     // pub servo_low: f32,
+}
+
+#[derive(Clone, Copy, PartialEq, TryFromPrimitive)]
+#[repr(u8)]
+pub enum BattCellCount {
+    S2 = 2,
+    S3 = 3,
+    S4 = 4,
+    S6 = 6,
+    S8 = 8,
+}
+
+impl Default for BattCellCount {
+    fn default() -> Self {
+        Self::S4
+    }
+}
+
+impl BattCellCount {
+    pub fn num_cells(&self) -> f32 {
+        // float since it interacts with floats.
+        match self {
+            Self::S2 => 2.,
+            Self::S3 => 3.,
+            Self::S4 => 4.,
+            Self::S6 => 6.,
+            Self::S8 => 8.,
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::S2 => "2S",
+            Self::S3 => "3S",
+            Self::S4 => "4S",
+            Self::S6 => "6S",
+            Self::S8 => "8S",
+        }
+    }
 }

@@ -38,41 +38,11 @@ const TIMEOUT_MILIS: u64 = 10;
 const READ_INTERVAL: f32 = 0.01;
 const READ_INTERVAL_MS: u128 = (READ_INTERVAL * 1_000.) as u128;
 
-#[derive(Clone, Copy, PartialEq)]
-pub enum BattCellCount {
-    S2,
-    S3,
-    S4,
-    S6,
-    S8,
-}
+struct CrcError {}
 
-impl Default for BattCellCount {
-    fn default() -> Self {
-        Self::S4
-    }
-}
-
-impl BattCellCount {
-    pub fn num_cells(&self) -> f32 {
-        // float since it interacts with floats.
-        match self {
-            Self::S2 => 2.,
-            Self::S3 => 3.,
-            Self::S4 => 4.,
-            Self::S6 => 6.,
-            Self::S8 => 8.,
-        }
-    }
-
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::S2 => "2S",
-            Self::S3 => "3S",
-            Self::S4 => "4S",
-            Self::S6 => "6S",
-            Self::S8 => "8S",
-        }
+impl From<CrcError> for io::Error {
+    fn from(_e: CrcError) -> Self {
+        Self::new(io::ErrorKind::Other, "CRC")
     }
 }
 
@@ -80,7 +50,7 @@ impl BattCellCount {
 pub struct State {
     pub attitude: Quaternion,
     pub attitude_commanded: Quaternion,
-    pub controls: ChannelData,
+    pub controls: Option<ChannelData>,
     pub link_stats: LinkStats,
     pub waypoints: [Option<Location>; MAX_WAYPOINTS],
     pub altitude_baro: f32,
@@ -184,7 +154,22 @@ fn send_payload<const N: usize>(
     Ok(())
 }
 
-// todo: `receive_payload` as well.
+/// Check CRC on an inbound message.
+fn check_crc(msg_type: MsgType, buf: &[u8]) -> Result<(), CrcError> {
+    // todo: Probably return a suitable error type here.
+    let payload_size = msg_type.payload_size();
+    let crc_read = buf[payload_size + 1];
+
+    let crc_expected = calc_crc(&CRC_LUT, &buf[..payload_size + 1], payload_size as u8 + 1);
+
+    if crc_read != crc_expected {
+        return Err(CrcError {});
+        // todo: Do something else here? Eg don't update self and resend.
+        println!("Incorrect CRC.");
+    }
+
+    Ok(())
+}
 
 impl State {
     /// Read parameters, such as attitude and altitutde
@@ -240,23 +225,7 @@ impl State {
         self.current = f32::from_be_bytes(rx_buf[i..F32_SIZE + i].try_into().unwrap());
         i += F32_SIZE;
 
-        // todo: Probably return a suitable error type here.
-        let payload_size_rx = MsgType::Params.payload_size();
-        let crc_rx_expected = calc_crc(
-            &CRC_LUT,
-            &rx_buf[..payload_size_rx + 1],
-            payload_size_rx as u8 + 1,
-        );
-
-        if rx_buf[PARAMS_SIZE] == 255 {
-            println!("Overflow on CRC (CRC = 255. Is this OK?");
-        }
-
-        let crc_read = rx_buf[PARAMS_SIZE + 1];
-        if crc_read != crc_rx_expected {
-            // todo: Do something else here? Eg don't update self and resend.
-            println!("Incorrect CRC from reading params!");
-        }
+        check_crc(MsgType::Params, &rx_buf)?;
 
         Ok(())
     }
@@ -285,24 +254,7 @@ impl State {
             rx_buf[1..SYS_AP_STATUS_SIZE + 1].try_into().unwrap();
         self.system_status = sys_status.into();
 
-        // todo: Probably return a suitable error type here.
-        // todo DRY
-        let payload_size_rx = MsgType::SysApStatus.payload_size();
-        let crc_rx_expected = calc_crc(
-            &CRC_LUT,
-            &rx_buf[..payload_size_rx + 1],
-            payload_size_rx as u8 + 1,
-        );
-
-        if rx_buf[SYS_AP_STATUS_SIZE] == 255 {
-            println!("Overflow on CRC (CRC = 255. Is this OK?");
-        }
-
-        let crc_read = rx_buf[SYS_AP_STATUS_SIZE + 1];
-        if crc_read != crc_rx_expected {
-            // todo: Do something else here? Eg don't update self and resend.
-            println!("Incorrect CRC from reading sys AP status!");
-        }
+        check_crc(MsgType::SysApStatus, &rx_buf)?;
 
         Ok(())
     }
@@ -328,25 +280,9 @@ impl State {
         port.read_exact(&mut rx_buf)?;
 
         let controls: [u8; CONTROLS_SIZE] = rx_buf[1..CONTROLS_SIZE + 1].try_into().unwrap();
-        self.controls = controls.into();
+        self.controls = controls_from_buf(controls);
 
-                // todo: Probably return a suitable error type here.
-        let payload_size_rx = MsgType::Controls.payload_size();
-        let crc_rx_expected = calc_crc(
-            &CRC_LUT,
-            &rx_buf[..payload_size_rx + 1],
-            payload_size_rx as u8 + 1,
-        );
-
-        if rx_buf[CONTROLS_SIZE] == 255 {
-            println!("Overflow on CRC (CRC = 255. Is this OK?");
-        }
-
-        let crc_read = rx_buf[CONTROLS_SIZE + 1];
-        if crc_read != crc_rx_expected {
-            // todo: Do something else here? Eg don't update self and resend.
-            println!("Incorrect CRC from reading controls!");
-        }
+        check_crc(MsgType::Controls, &rx_buf)?;
 
         Ok(())
     }
@@ -374,23 +310,7 @@ impl State {
 
         self.link_stats = link_stats.into();
 
-                // todo: Probably return a suitable error type here.
-        let payload_size_rx = MsgType::LinkStats.payload_size();
-        let crc_rx_expected = calc_crc(
-            &CRC_LUT,
-            &rx_buf[..payload_size_rx + 1],
-            payload_size_rx as u8 + 1,
-        );
-
-        if rx_buf[LINK_STATS_SIZE] == 255 {
-            println!("Overflow on CRC (CRC = 255. Is this OK?");
-        }
-
-        let crc_read = rx_buf[LINK_STATS_SIZE + 1];
-        if crc_read != crc_rx_expected {
-            // todo: Do something else here? Eg don't update self and resend.
-            println!("Incorrect CRC from reading link stats!");
-        }
+        check_crc(MsgType::LinkStats, &rx_buf)?;
 
         Ok(())
     }
@@ -420,6 +340,8 @@ impl State {
         let waypoints_data = waypoints_from_buf(wp_buf);
 
         self.waypoints = waypoints_data;
+
+        check_crc(MsgType::Waypoints, &rx_buf)?;
 
         // todo: Lat, Lon
 
@@ -452,7 +374,7 @@ impl State {
         // todo: Fixed wing A/R.
         self.control_mapping_quad = control_mapping;
 
-        // todo: Lat, Lon
+        check_crc(MsgType::ControlMapping, &rx_buf)?;
 
         Ok(())
     }
@@ -469,7 +391,6 @@ impl State {
                 ))
             }
         };
-
 
         // self.read_params(port)?;
         // self.read_controls(port)?;
@@ -541,13 +462,7 @@ impl State {
     ) -> Result<(), io::Error> {
         if let Some(port) = self.interface.serial_port.as_mut() {
             let v = value.to_be_bytes();
-            let payload = [
-                servo_posit as u8,
-                v[0],
-                v[1],
-                v[2],
-                v[3],
-            ];
+            let payload = [servo_posit as u8, v[0], v[1], v[2], v[3]];
 
             send_payload::<{ SET_SERVO_POSIT_SIZE + 2 }>(MsgType::SetServoPosit, &payload, port)
         } else {
@@ -588,25 +503,28 @@ impl From<[u8; SYS_STATUS_SIZE]> for SystemStatus {
             esc_telemetry: p[5].try_into().unwrap(),
             esc_rpm: p[6].try_into().unwrap(),
             rf_control_link: p[7].try_into().unwrap(),
-            rf_control_fault: p[8] != 0,
-            esc_rpm_fault: p[9] != 0,
+            flash_spi: p[8].try_into().unwrap(),
+            rf_control_fault: p[9] != 0,
+            esc_rpm_fault: p[10] != 0,
         }
     }
 }
 
-impl From<[u8; CONTROLS_SIZE]> for ChannelData {
-    /// 19 f32s x 4 = 76. In the order we have defined in the struct.
-    fn from(p: [u8; CONTROLS_SIZE]) -> Self {
-        ChannelData {
-            pitch: bytes_to_float(&p[0..4]),
-            roll: bytes_to_float(&p[4..8]),
-            yaw: bytes_to_float(&p[8..12]),
-            throttle: bytes_to_float(&p[12..16]),
-
-            arm_status: p[16].try_into().unwrap(),
-            input_mode: p[17].try_into().unwrap(),
-        }
+/// 19 f32s x 4 = 76. In the order we have defined in the struct.
+pub fn controls_from_buf(p: [u8; CONTROLS_SIZE]) -> Option<ChannelData> {
+    if p[0] == 0 {
+        return None;
     }
+
+    Some(ChannelData {
+        pitch: bytes_to_float(&p[1..5]),
+        roll: bytes_to_float(&p[5..9]),
+        yaw: bytes_to_float(&p[9..13]),
+        throttle: bytes_to_float(&p[13..17]),
+
+        arm_status: p[17].try_into().unwrap(),
+        input_mode: p[18].try_into().unwrap(),
+    })
 }
 
 impl From<[u8; LINK_STATS_SIZE]> for LinkStats {
@@ -720,7 +638,6 @@ impl SerialInterface {
                                     return Self {
                                         serial_port: Some(port),
                                     };
-
                                 }
                                 Err(serialport::Error { kind, description }) => {
                                     match kind {

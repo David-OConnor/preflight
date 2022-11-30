@@ -190,11 +190,11 @@ fn add_link_stats(link_stats: &LinkStats, ui: &mut Ui) {
         });
         ui.add_space(SPACING_HORIZONTAL_TIGHT);
 
-        // ui.vertical(|ui| {
-        //     ui.label("Uplink RSSI 2");
-        //     ui.label(&link_stats.uplink_rssi_2.to_string());
-        // });
-        // ui.add_space(SPACING_HORIZONTAL_TIGHT);
+        ui.vertical(|ui| {
+            ui.label("Uplink RSSI 2");
+            ui.label(&link_stats.uplink_rssi_2.to_string());
+        });
+        ui.add_space(SPACING_HORIZONTAL_TIGHT);
 
         ui.vertical(|ui| {
             ui.label("Link qual");
@@ -253,18 +253,109 @@ fn add_not_connected_page(ui: &mut Ui) {
     ui.add_space(300.); // So not aligned to bottom of the window.
 }
 
+/// From Corvus
+const BATT_LUT: [(f32, f32); 21] = [
+    (3.27, 0.),
+    (3.61, 0.05),
+    (3.69, 0.1),
+    (3.71, 0.15),
+    (3.73, 0.2),
+    (3.75, 0.25),
+    (3.77, 0.3),
+    (3.79, 0.35),
+    (3.8, 0.4),
+    (3.82, 0.45),
+    (3.84, 0.5),
+    (3.85, 0.55),
+    (3.87, 0.6),
+    (3.91, 0.65),
+    (3.95, 0.7),
+    (3.98, 0.75),
+    (4.02, 0.8),
+    (4.08, 0.85),
+    (4.11, 0.9),
+    (4.15, 0.95),
+    (4.20, 1.),
+];
+
 /// Returns an estimate of battery life, with 0. being empty, and 1. being full.
 /// Input is in volts.
+/// From Corvus.
 /// [Reference with table](https://blog.ampow.com/lipo-voltage-chart/)
 fn batt_left_from_v(v: f32, cell_count: BattCellCount) -> f32 {
     let per_cell = v / cell_count.num_cells();
     // todo: Temp. Refine this.
-    let empty_v = 3.5;
-    let full_v = 4.2;
+    // let empty_v = 3.5;
+    // let full_v = 4.2;
+
+    let mut i = 0;
+
+    // todo: Refactor to use an if/else cascade
+    if per_cell > BATT_LUT[1].0 {
+        i = 1;
+    }
+    if per_cell > BATT_LUT[2].0 {
+        i = 2;
+    }
+    if per_cell > BATT_LUT[3].0 {
+        i = 3;
+    }
+    if per_cell > BATT_LUT[4].0 {
+        i = 4;
+    }
+    if per_cell > BATT_LUT[5].0 {
+        i = 5;
+    }
+    if per_cell > BATT_LUT[6].0 {
+        i = 6;
+    }
+    if per_cell > BATT_LUT[7].0 {
+        i = 7;
+    }
+    if per_cell > BATT_LUT[8].0 {
+        i = 8;
+    }
+    if per_cell > BATT_LUT[9].0 {
+        i = 9;
+    }
+    if per_cell > BATT_LUT[10].0 {
+        i = 10;
+    }
+    if per_cell > BATT_LUT[11].0 {
+        i = 11;
+    }
+    if per_cell > BATT_LUT[12].0 {
+        i = 12;
+    }
+    if per_cell > BATT_LUT[13].0 {
+        i = 13;
+    }
+    if per_cell > BATT_LUT[14].0 {
+        i = 14;
+    }
+    if per_cell > BATT_LUT[15].0 {
+        i = 15;
+    }
+    if per_cell > BATT_LUT[16].0 {
+        i = 16;
+    }
+    if per_cell > BATT_LUT[17].0 {
+        i = 17;
+    }
+    if per_cell > BATT_LUT[18].0 {
+        i = 18;
+    }
+    if per_cell > BATT_LUT[19].0 {
+        i = 19;
+    }
+    if per_cell > BATT_LUT[20].0 {
+        i = 20;
+    }
 
     // todo. Not linear! Just for now.
 
-    (per_cell - empty_v) / (full_v - empty_v)
+    let port_through = (per_cell - BATT_LUT[i].0) / (BATT_LUT[i + 1].0 - BATT_LUT[i].0);
+    port_through * (BATT_LUT[i + 1].1 - BATT_LUT[i].1) + BATT_LUT[i].1
 }
 
 /// Charge is on a scale of 0. to 1.
@@ -278,7 +369,6 @@ fn batt_charge_to_color(charge: f32) -> Color32 {
     let r = ((1. - charge) * 255.) as u8;
     let g = (charge * 255.) as u8;
     let b = 0;
-
 
     Color32::from_rgb(r, g, b)
 }
@@ -350,6 +440,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
             add_sensor_status("AGL altimeter: ", state.system_status.tof, ui);
             add_sensor_status("GNSS (ie GPS): ", state.system_status.gps, ui);
             add_sensor_status("Magnetometer: ", state.system_status.magnetometer, ui);
+            add_sensor_status("SPI flash: ", state.system_status.flash_spi, ui);
             // add_sensor_status("ESC telemetry: ", state.system_status.esc_telemetry, ui);
 
             // todo: Probably a separate row for faults?
@@ -357,6 +448,13 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
             let val = state.system_status.rf_control_fault;
             ui.vertical(|ui| {
                 ui.label("RF faults: ");
+                ui.label(RichText::new(val.to_string()).color(test_val_to_color(val)));
+            });
+            ui.add_space(SPACING_HORIZONTAL);
+
+            let val = state.system_status.esc_rpm_fault;
+            ui.vertical(|ui| {
+                ui.label("RPM faults: ");
                 ui.label(RichText::new(val.to_string()).color(test_val_to_color(val)));
             });
             ui.add_space(SPACING_HORIZONTAL);
@@ -402,23 +500,38 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                 // todo: Add user-selectable battery cell field. Have this save somewhere
                 // todo on the computer.
                 // todo: Color-code appropriately.
-                let batt_life = batt_left_from_v(state.batt_v, state.batt_cell_count);
+
+                let batt_connected = state.batt_v > 0.1;
+
+                // todo: Consider filtering instead with a LP.
+                // Round to avoid a jittery progress bar.
+                // let batt_v = (state.batt_v * 10.).round() / 10.;
+                let batt_v = state.batt_v;
+
+                let batt_life = batt_left_from_v(batt_v, state.batt_cell_count);
                 ui.vertical(|ui| {
                     ui.label("Batt Volts:");
                     // ui.label(format!("{:.1}", &state.batt_v));
-                    ui.label(RichText::new(format!("{:.1}", state.batt_v)).color(batt_charge_to_color(batt_life)));
+                    if batt_connected {
+                        ui.label(
+                            RichText::new(format!("{:.1}", batt_v))
+                                .color(batt_charge_to_color(batt_life)),
+                        );
+                    } else {
+                        ui.label(RichText::new("Not connected").color(Color32::GOLD));
+                    }
                 });
                 ui.add_space(SPACING_HORIZONTAL);
 
-                // tood: COlor the bar.
-                ui.vertical(|ui| {
-                    ui.label("Batt Life");
-                    let bar =
-                        ProgressBar::new(batt_life)
-                            .desired_width(BATT_LIFE_WIDTH);
-                    ui.add(bar);
-                });
-                ui.add_space(SPACING_HORIZONTAL);
+                if batt_connected {
+                    // tood: Color the bar.
+                    ui.vertical(|ui| {
+                        ui.label("Batt Life");
+                        let bar = ProgressBar::new(batt_life).desired_width(BATT_LIFE_WIDTH);
+                        ui.add(bar);
+                    });
+                    ui.add_space(SPACING_HORIZONTAL);
+                }
 
                 ui.vertical(|ui| {
                     ui.label("ESC current (A):");
@@ -448,21 +561,25 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
             ui.vertical(|ui| {
                 ui.heading("Control commands");
 
-                if state.system_status.rf_control_link == SensorStatus::Pass {
+                if state.system_status.rf_control_link == SensorStatus::Pass
+                    && state.controls.is_some()
+                {
+                    let controls = state.controls.as_ref().unwrap();
+
                     ui.horizontal(|ui| {
-                        add_control_disp(state.controls.pitch, "Pitch", true, ui);
-                        add_control_disp(state.controls.roll, "Roll", true, ui);
+                        add_control_disp(controls.pitch, "Pitch", true, ui);
+                        add_control_disp(controls.roll, "Roll", true, ui);
                     });
                     ui.horizontal(|ui| {
-                        add_control_disp(state.controls.yaw, "Yaw", true, ui);
-                        add_control_disp(state.controls.throttle, "Throttle", false, ui);
+                        add_control_disp(controls.yaw, "Yaw", true, ui);
+                        add_control_disp(controls.throttle, "Throttle", false, ui);
                     });
 
                     // todo Important: This isn't the actual arm status state! It's the control input!
                     // todo: Potentially misleading.
                     ui.vertical(|ui| {
                         ui.label("Motor arm switch");
-                        let val = state.controls.arm_status;
+                        let val = controls.arm_status;
                         ui.label(RichText::new(val.as_str()).color(val.as_color()));
                     });
                 } else {

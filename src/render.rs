@@ -22,7 +22,7 @@ use lin_alg2::{
 use crate::{render, ui, SerialInterface, State, READ_INTERVAL_MS};
 
 pub const BACKGROUND_COLOR: (f32, f32, f32) = (0.9, 0.9, 0.9);
-const WINDOW_TITLE: &str = "AnyLeaf Preflight";
+const WINDOW_TITLE: &str = "Corvus Preflight";
 const WINDOW_WIDTH: f32 = 900.;
 const WINDOW_HEIGHT: f32 = 800.;
 
