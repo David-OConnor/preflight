@@ -185,14 +185,18 @@ fn add_link_stats(link_stats: &LinkStats, ui: &mut Ui) {
     // todo: convert things like tx power to actual power disp
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
-            ui.label("Uplink RSSI 1");
+            // todo: (130+RSSI_dBm)/130*100?
+            //  dbm = lambda v: v * 130/100 - 130
+            ui.label("Uplink RSSI 1 (dBm)");
             ui.label(&link_stats.uplink_rssi_1.to_string());
+            ui.label(format!("-{}", &link_stats.uplink_rssi_1));
         });
         ui.add_space(SPACING_HORIZONTAL_TIGHT);
 
         ui.vertical(|ui| {
             ui.label("Uplink RSSI 2");
-            ui.label(&link_stats.uplink_rssi_2.to_string());
+            // ui.label(&link_stats.uplink_rssi_2.to_string());
+            ui.label(format!("-{}", &link_stats.uplink_rssi_2));
         });
         ui.add_space(SPACING_HORIZONTAL_TIGHT);
 
@@ -469,8 +473,9 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                 // todo: Center these.
                 ui.vertical(|ui| {
                     ui.label("Altitude baro:");
-                    ui.label(&(state.altitude_baro.to_string() + " m"));
+                    ui.label(format!("{:.1} m", state.altitude_baro));
                 });
+                // todo: Display pressure and temperature here to, to QC.
                 ui.add_space(SPACING_HORIZONTAL);
 
                 if state.altitude_agl.is_some() {
