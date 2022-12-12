@@ -78,6 +78,17 @@ fn link_qual_to_color(lq: u8) -> Color32 {
     }
 }
 
+/// Uses the raw value provided over CRSF, ie positive values.
+/// These are for ground testing, with the drone next to the radio, and
+/// antennas plugged in.
+fn rssi_to_color(rssi: u8) -> Color32 {
+    match rssi {
+        0..=50 => Color32::LIGHT_GREEN,
+        51..=70 => Color32::LIGHT_YELLOW,
+        _ => Color32::LIGHT_RED,
+    }
+}
+
 fn test_val_to_color(v: bool) -> Color32 {
     if v {
         Color32::LIGHT_RED
@@ -188,15 +199,15 @@ fn add_link_stats(link_stats: &LinkStats, ui: &mut Ui) {
             // todo: (130+RSSI_dBm)/130*100?
             //  dbm = lambda v: v * 130/100 - 130
             ui.label("Uplink RSSI 1 (dBm)");
-            ui.label(&link_stats.uplink_rssi_1.to_string());
-            ui.label(format!("-{}", &link_stats.uplink_rssi_1));
+            let val = &link_stats.uplink_rssi_1;
+            ui.label(RichText::new(format!("-{}", val)).color(rssi_to_color(*val)));
         });
         ui.add_space(SPACING_HORIZONTAL_TIGHT);
 
         ui.vertical(|ui| {
             ui.label("Uplink RSSI 2");
-            // ui.label(&link_stats.uplink_rssi_2.to_string());
-            ui.label(format!("-{}", &link_stats.uplink_rssi_2));
+            let val = &link_stats.uplink_rssi_2;
+            ui.label(RichText::new(format!("-{}", val)).color(rssi_to_color(*val)));
         });
         ui.add_space(SPACING_HORIZONTAL_TIGHT);
 
@@ -352,9 +363,9 @@ fn batt_left_from_v(v: f32, cell_count: BattCellCount) -> f32 {
     if per_cell > BATT_LUT[19].0 {
         i = 19;
     }
-    if per_cell > BATT_LUT[20].0 {
-        i = 20;
-    }
+    // if per_cell > BATT_LUT[20].0 {
+    //     i = 20;
+    // }
 
     // todo. Not linear! Just for now.
 
@@ -449,19 +460,19 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
             // todo: Probably a separate row for faults?
             // todo:  Helper as above for bit statuses.
-            let val = state.system_status.rf_control_fault;
-            ui.vertical(|ui| {
-                ui.label("RF faults: ");
-                ui.label(RichText::new(val.to_string()).color(test_val_to_color(val)));
-            });
-            ui.add_space(SPACING_HORIZONTAL);
-
-            let val = state.system_status.esc_rpm_fault;
-            ui.vertical(|ui| {
-                ui.label("RPM faults: ");
-                ui.label(RichText::new(val.to_string()).color(test_val_to_color(val)));
-            });
-            ui.add_space(SPACING_HORIZONTAL);
+            // let val = state.system_status.rf_control_fault;
+            // ui.vertical(|ui| {
+            //     ui.label("RF faults: ");
+            //     ui.label(RichText::new(val.to_string()).color(test_val_to_color(val)));
+            // });
+            // ui.add_space(SPACING_HORIZONTAL);
+            //
+            // let val = state.system_status.esc_rpm_fault;
+            // ui.vertical(|ui| {
+            //     ui.label("RPM faults: ");
+            //     ui.label(RichText::new(val.to_string()).color(test_val_to_color(val)));
+            // });
+            // ui.add_space(SPACING_HORIZONTAL);
         });
 
         ui.add_space(SPACE_BETWEEN_SECTIONS);
@@ -474,6 +485,16 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                 ui.vertical(|ui| {
                     ui.label("Altitude baro:");
                     ui.label(format!("{:.1} m", state.altitude_baro));
+                });
+
+                ui.vertical(|ui| {
+                    ui.label("Pressure (kPa):");
+                    ui.label(format!("{:.3}", state.pressure_static / 1_000.));
+                });
+
+                ui.vertical(|ui| {
+                    ui.label("Temp (°C):");
+                    ui.label(format!("{:.1}", state.temp_baro - 273.15));
                 });
                 // todo: Display pressure and temperature here to, to QC.
                 ui.add_space(SPACING_HORIZONTAL);

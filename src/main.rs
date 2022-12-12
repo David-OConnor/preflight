@@ -54,6 +54,8 @@ pub struct State {
     pub link_stats: LinkStats,
     pub waypoints: [Option<Location>; MAX_WAYPOINTS],
     pub altitude_baro: f32,
+    pub pressure_static: f32,
+    pub temp_baro: f32,
     pub altitude_agl: Option<f32>,
     pub batt_v: f32,
     pub current: f32,
@@ -102,6 +104,8 @@ impl Default for State {
             link_stats: Default::default(),
             waypoints,
             altitude_baro: 0.,
+            pressure_static: 0.,
+            temp_baro: 0.,
             altitude_agl: None,
             batt_v: 0.,
             current: 0.,
@@ -223,6 +227,12 @@ impl State {
         i += F32_SIZE;
 
         self.current = f32::from_be_bytes(rx_buf[i..F32_SIZE + i].try_into().unwrap());
+        i += F32_SIZE;
+
+        self.pressure_static = f32::from_be_bytes(rx_buf[i..F32_SIZE + i].try_into().unwrap());
+        i += F32_SIZE;
+
+        self.temp_baro = f32::from_be_bytes(rx_buf[i..F32_SIZE + i].try_into().unwrap());
         i += F32_SIZE;
 
         check_crc(MsgType::Params, &rx_buf)?;
