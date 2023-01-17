@@ -62,10 +62,10 @@ pub struct State {
     pub lat: Option<f32>,
     pub lon: Option<f32>,
     // todo: aftleft etc, or 1-4?
-    pub rpm1: Option<f32>,
-    pub rpm2: Option<f32>,
-    pub rpm3: Option<f32>,
-    pub rpm4: Option<f32>,
+    pub rpm1: Option<u16>,
+    pub rpm2: Option<u16>,
+    pub rpm3: Option<u16>,
+    pub rpm4: Option<u16>,
     pub autopilot_status: AutopilotStatus,
     pub last_attitude_update: Instant,
     pub last_controls_update: Instant,
@@ -234,6 +234,17 @@ impl State {
 
         self.temp_baro = f32::from_be_bytes(rx_buf[i..F32_SIZE + i].try_into().unwrap());
         i += F32_SIZE;
+
+        for rpm in &mut [self.rpm1, self.rpm2, self.rpm3, self.rpm4] {
+            *rpm = match rx_buf[i] {
+                0 => None,
+                _ => Some(u16::from_be_bytes(
+                    rx_buf[i + 1..2 + i + 1].try_into().unwrap(),
+                )),
+            };
+
+            i += 3;
+        }
 
         check_crc(MsgType::Params, &rx_buf)?;
 

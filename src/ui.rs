@@ -150,7 +150,7 @@ fn rad_to_dms(rad: f32, lat_lon: LatLon) -> String {
     format!("{deg_whole}° {mins_whole}' {:.2}\" {n_s}", secs)
 }
 
-fn format_rpm(rpm: Option<f32>) -> String {
+fn format_rpm(rpm: Option<u16>) -> String {
     match rpm {
         Some(r) => r.to_string(),
         None => "(no data)".to_owned(),
@@ -432,9 +432,13 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
         YawAssist::RollAssist => "Auto roll",
     };
 
+    let mut engine_updates = EngineUpdates::default();
+
     let panel = egui::TopBottomPanel::bottom("UI panel"); // ID must be unique among panels.
 
     panel.show(ctx, |ui| {
+        engine_updates.ui_size = ui.available_height();
+
         if !state.connected_to_fc {
             add_not_connected_page(ui);
             return; // todo?
@@ -809,5 +813,5 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
         }
     });
 
-    EngineUpdates::default()
+    engine_updates
 }

@@ -9,7 +9,7 @@ use std::{
 
 use graphics::{
     self, Camera, DeviceEvent, EngineUpdates, Entity, InputSettings, LightType, Lighting, Mesh,
-    PointLight, Scene, UiSettings,
+    PointLight, Scene, UiSettings, UiLayout,
 };
 
 use lin_alg2::{
@@ -77,7 +77,7 @@ pub fn run(state: State) {
         // Aircraft estimated attitude
         Entity::new(
             0,
-            Vec3::new(-6., 9., 0.),
+            Vec3::new(-6., 0., 0.),
             Quaternion::new_identity(),
             1.,
             (1., 0., 1.),
@@ -86,16 +86,13 @@ pub fn run(state: State) {
         // Commanded attitutde
         Entity::new(
             0,
-            Vec3::new(6., 9., 0.),
+            Vec3::new(6., 0., 0.),
             Quaternion::new_identity(),
             1.,
             (1., 0., 1.),
             1.,
         ),
     ];
-
-    // todo: Engine-side, you need to set it up so the window is centered
-    // todo: on the visible part; not overlayed over.
 
     let scene = Scene {
         // todo: Change these meshes A/R.
@@ -117,14 +114,15 @@ pub fn run(state: State) {
         window_size: (WINDOW_WIDTH, WINDOW_HEIGHT),
         window_title: WINDOW_TITLE.to_owned(),
         camera: Camera {
-            position: Vec3::new(0., 0., -20.),
+            position: Vec3::new(0., 0., -10.),
             ..Default::default()
         },
     };
 
     let input_settings = InputSettings::default();
     let ui_settings = UiSettings {
-        width: 0.,
+        layout: UiLayout::Bottom,
+        size: 0., // todo: Bad API here.
         icon_path: None,
     };
 
