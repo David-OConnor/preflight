@@ -9,7 +9,7 @@ use std::{
 
 use graphics::{
     self, Camera, DeviceEvent, EngineUpdates, Entity, InputSettings, LightType, Lighting, Mesh,
-    PointLight, Scene, UiSettings, UiLayout,
+    PointLight, Scene, UiLayout, UiSettings, Vertex,
 };
 
 use lin_alg2::{
@@ -71,6 +71,79 @@ fn event_handler(
     Default::default()
 }
 
+fn make_aircraft_mesh() -> graphics::Mesh {
+    // todo: For now, triangular
+    let height = 0.2;
+
+    // Top face
+    let fwd_top = [0., height, 1.];
+    let al_top = [-1., height, -1.];
+    let ar_top = [1., height, -1.];
+
+    // Bottom face
+    let fwd_bt = [0., -height, 1.];
+    let al_bt = [-1., -height, -1.];
+    let ar_bt = [1., -height, -1.];
+
+    // Normal vectors
+    let aft = Vec3::new(0., 0., -1.);
+    let fl = Vec3::new(-1., -1., 0.).to_normalized();
+    let fr = Vec3::new(1., 1., 0.).to_normalized();
+    let t = Vec3::new(0., 1., 0.);
+    let b = Vec3::new(0., -1., 0.);
+
+    let vertices = vec![
+        // Top
+        Vertex::new(fwd_top, t),
+        Vertex::new(al_top, t),
+        Vertex::new(ar_top, t),
+        // Bottom
+        Vertex::new(fwd_bt, b),
+        Vertex::new(al_bt, b),
+        Vertex::new(ar_bt, b),
+        // Aft
+        Vertex::new(al_top, aft),
+        Vertex::new(al_bt, aft),
+        Vertex::new(ar_bt, aft),
+        Vertex::new(ar_top, aft),
+        // Front left
+        Vertex::new(al_top, fl),
+        Vertex::new(fwd_top, fl),
+        Vertex::new(fwd_bt, fl),
+        Vertex::new(al_bt, fl),
+        // Front right
+        Vertex::new(ar_top, fr),
+        Vertex::new(ar_bt, fr),
+        Vertex::new(fwd_bt, fr),
+        Vertex::new(fwd_top, fr),
+    ];
+
+    // Make triangles from indices
+    let faces = [
+        [0, 1, 2],    // t
+        [3, 4, 5],    // b
+        [6, 7, 8],    // aft 1
+        [7, 8, 9],    // aft 2
+        [10, 11, 12], // fl1
+        [11, 12, 13], // fl2
+        [14, 15, 16], // fr1
+        [15, 16, 17], //fr2
+    ];
+
+    let mut indices = Vec::new();
+    for face in &faces {
+        indices.append(&mut vec![
+            face[0], face[1], face[2], face[0], face[2], face[3],
+        ]);
+    }
+
+    graphics::Mesh {
+        vertices,
+        indices,
+        material: 0,
+    }
+}
+
 /// The entry point for our renderer.
 pub fn run(state: State) {
     let entities = vec![
@@ -94,9 +167,11 @@ pub fn run(state: State) {
         ),
     ];
 
+    let aircraft_mesh = Mesh::new_box(1., 1., 1.);
+
     let scene = Scene {
         // todo: Change these meshes A/R.
-        meshes: vec![Mesh::new_box(1., 1., 1.), Mesh::new_sphere(1., 50, 50)],
+        meshes: vec![aircraft_mesh, Mesh::new_sphere(1., 50, 50)],
         entities,
         lighting: Lighting {
             ambient_color: [1., 1., 0., 1.],
@@ -134,6 +209,7 @@ pub fn run(state: State) {
         render_handler,
         event_handler,
         ui::run,
+        include_str!("shader_compute.wgsl"),
     );
 }
 
