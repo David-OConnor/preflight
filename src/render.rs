@@ -19,12 +19,13 @@ use lin_alg2::{
 
 // todo: Fake horizon in background
 
-use crate::{render, ui, SerialInterface, State, READ_INTERVAL_MS};
+use crate::{render, ui, SerialInterface, State, READ_INTERVAL_MS, DISCONNECTED_TIMEOUT_MS};
 
 pub const BACKGROUND_COLOR: (f32, f32, f32) = (0.9, 0.9, 0.9);
 const WINDOW_TITLE: &str = "Corvus Preflight";
-const WINDOW_WIDTH: f32 = 900.;
-const WINDOW_HEIGHT: f32 = 800.;
+const WINDOW_WIDTH: f32 = 1_400.;
+const WINDOW_HEIGHT: f32 = 1_000.;
+
 
 // fn make_render_handler() -> impl FnMut(&mut State, &mut Scene) -> bool {
 fn render_handler(state: &mut State, scene: &mut Scene, dt: f32) -> EngineUpdates {
@@ -55,7 +56,7 @@ fn render_handler(state: &mut State, scene: &mut Scene, dt: f32) -> EngineUpdate
         }
 
         // todo: Don't hard-code this: Use a const etc for the thresh
-        if (Instant::now() - state.last_fc_response) > Duration::from_millis(500) {
+        if (Instant::now() - state.last_fc_response) > Duration::from_millis(DISCONNECTED_TIMEOUT_MS) {
             state.connected_to_fc = false;
         };
     }
@@ -99,8 +100,8 @@ fn make_aircraft_mesh() -> graphics::Mesh {
         Vertex::new(ar_top, t),
         // Bottom
         Vertex::new(fwd_bt, b),
-        Vertex::new(al_bt, b),
         Vertex::new(ar_bt, b),
+        Vertex::new(al_bt, b),
         // Aft
         Vertex::new(al_top, aft),
         Vertex::new(al_bt, aft),
@@ -122,18 +123,19 @@ fn make_aircraft_mesh() -> graphics::Mesh {
     let faces = [
         [0, 1, 2],    // t
         [3, 4, 5],    // b
-        [6, 7, 8],    // aft 1
+        [6, 7, 9],    // aft 1
         [7, 8, 9],    // aft 2
-        [10, 11, 12], // fl1
-        [11, 12, 13], // fl2
-        [14, 15, 16], // fr1
-        [15, 16, 17], //fr2
+        [10, 13, 12], // fl1
+        [10, 12, 11], // fl2
+        [14, 16, 17], // fr1
+        [14, 15, 16], // fr2
     ];
 
     let mut indices = Vec::new();
     for face in &faces {
         indices.append(&mut vec![
-            face[0], face[1], face[2], face[0], face[2], face[3],
+            // face[0], face[1], face[2], face[0], face[2], face[3],
+            face[0], face[1], face[2]
         ]);
     }
 
@@ -150,7 +152,7 @@ pub fn run(state: State) {
         // Aircraft estimated attitude
         Entity::new(
             0,
-            Vec3::new(-6., 0., 0.),
+            Vec3::new(0., 3., 0.),
             Quaternion::new_identity(),
             1.,
             (1., 0., 1.),
@@ -159,7 +161,7 @@ pub fn run(state: State) {
         // Commanded attitutde
         Entity::new(
             0,
-            Vec3::new(6., 0., 0.),
+            Vec3::new(0., -3., 0.),
             Quaternion::new_identity(),
             1.,
             (1., 0., 1.),
@@ -167,7 +169,8 @@ pub fn run(state: State) {
         ),
     ];
 
-    let aircraft_mesh = Mesh::new_box(1., 1., 1.);
+    // let aircraft_mesh = Mesh::new_box(1., 1., 1.);
+    let aircraft_mesh = make_aircraft_mesh();
 
     let scene = Scene {
         // todo: Change these meshes A/R.
@@ -195,8 +198,9 @@ pub fn run(state: State) {
     };
 
     let input_settings = InputSettings::default();
+
     let ui_settings = UiSettings {
-        layout: UiLayout::Bottom,
+        layout: UiLayout::Left,
         size: 0., // todo: Bad API here.
         icon_path: None,
     };

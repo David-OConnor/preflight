@@ -6,7 +6,7 @@ pub const CRC_POLY: u8 = 0xab;
 pub const CRC_LUT: [u8; 256] = crc_init(CRC_POLY);
 
 pub const QUATERNION_SIZE: usize = F32_SIZE * 4; // Quaternion (4x4 + altimeter + voltage reading + current reading)
-pub const PARAMS_SIZE: usize = 2 * QUATERNION_SIZE + 6 * F32_SIZE + 1 + 4 * 3;
+pub const PARAMS_SIZE: usize = 2 * QUATERNION_SIZE + 6 * F32_SIZE + 1 + 4 * 3 + 1 + F32_SIZE * 4;
 pub const CONTROLS_SIZE: usize = 19;
 pub const LINK_STATS_SIZE: usize = 5; // Only the first 4 fields.
 
@@ -246,10 +246,11 @@ pub struct Quaternion {
     pub z: f32,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, TryFromPrimitive)]
+#[repr(u8)]
 pub enum AircraftType {
-    Quadcopter,
-    FlyingWing,
+    Quadcopter = 0,
+    FixedWing = 1,
 }
 
 #[derive(Clone, Default)]
@@ -503,4 +504,22 @@ impl BattCellCount {
             Self::S8 => "8S",
         }
     }
+}
+
+/// Represents power levels for the rotors. These map from 0. to 1.; 0% to 100% power.
+#[derive(Clone, Default)]
+pub struct MotorPower {
+    pub front_left: f32,
+    pub front_right: f32,
+    pub aft_left: f32,
+    pub aft_right: f32,
+}
+
+/// We use a f32 on the FC, but send as u16 over USB.
+#[derive(Default)]
+pub struct RpmReadings {
+    pub front_left: Option<u16>,
+    pub front_right: Option<u16>,
+    pub aft_left: Option<u16>,
+    pub aft_right: Option<u16>,
 }

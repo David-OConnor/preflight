@@ -29,6 +29,8 @@ const BAUD: u32 = 115_200;
 
 const TIMEOUT_MILIS: u64 = 10;
 
+const DISCONNECTED_TIMEOUT_MS: u64 = 500;
+
 // At this interval, in seconds, request new data from the FC.
 // todo: Do you want some (or all?) of the read data to be pushed at a regular
 // todo interval on request from this program, or pushed at an interval from the FC
@@ -62,10 +64,7 @@ pub struct State {
     pub lat: Option<f32>,
     pub lon: Option<f32>,
     // todo: aftleft etc, or 1-4?
-    pub rpm1: Option<u16>,
-    pub rpm2: Option<u16>,
-    pub rpm3: Option<u16>,
-    pub rpm4: Option<u16>,
+    pub rpm_readings: RpmReadings,
     pub autopilot_status: AutopilotStatus,
     pub last_attitude_update: Instant,
     pub last_controls_update: Instant,
@@ -86,6 +85,7 @@ pub struct State {
     pub editing_motor_mapping: bool,
     pub batt_cell_count: BattCellCount,
     interface: SerialInterface,
+    current_pwr: MotorPower,
 }
 
 impl Default for State {
@@ -111,10 +111,7 @@ impl Default for State {
             current: 0.,
             lat: None,
             lon: None,
-            rpm1: None,
-            rpm2: None,
-            rpm3: None,
-            rpm4: None,
+            rpm_readings: Default::default(),
             autopilot_status: Default::default(),
             last_attitude_update: Instant::now(),
             last_controls_update: Instant::now(),
@@ -129,6 +126,8 @@ impl Default for State {
             editing_motor_mapping: false,
             batt_cell_count: Default::default(),
             interface: SerialInterface::new(),
+            current_pwr: Default::default(),
+
         }
     }
 }
@@ -235,16 +234,43 @@ impl State {
         self.temp_baro = f32::from_be_bytes(rx_buf[i..F32_SIZE + i].try_into().unwrap());
         i += F32_SIZE;
 
-        for rpm in &mut [self.rpm1, self.rpm2, self.rpm3, self.rpm4] {
-            *rpm = match rx_buf[i] {
-                0 => None,
-                _ => Some(u16::from_be_bytes(
-                    rx_buf[i + 1..2 + i + 1].try_into().unwrap(),
-                )),
-            };
+        self.rpm_readings.front_left = match rx_buf[i] {
+            1 =>
+                Some(u16::from_be_bytes(rx_buf[i + 1..i + 3].try_into().unwrap())),
+            _ => None,
+        };
+        i += 3;
 
-            i += 3;
-        }
+        self.rpm_readings.aft_left = match rx_buf[i] {
+            1 => Some(u16::from_be_bytes(rx_buf[i + 1..i + 3].try_into().unwrap())),
+
+            _ => None,
+        };
+        i += 3;
+
+        self.rpm_readings.front_right = match rx_buf[i] {
+            1 => Some(u16::from_be_bytes(rx_buf[i + 1..i + 3].try_into().unwrap())),
+            _ => None,
+        };
+        i += 3;
+
+        self.rpm_readings.aft_right = match rx_buf[i] {
+            1 => Some(u16::from_be_bytes(rx_buf[i + 1..i + 3].try_into().unwrap())),
+            _ => None
+        };
+        i += 3;
+
+        self.aircraft_type = rx_buf[i].try_into().unwrap();
+        i += 1;
+
+        self.current_pwr.front_left = f32::from_be_bytes(rx_buf[i..i+4].try_into().unwrap());
+        i += 4;
+        self.current_pwr.aft_left = f32::from_be_bytes(rx_buf[i..i+4].try_into().unwrap());
+        i += 4;
+        self.current_pwr.front_right = f32::from_be_bytes(rx_buf[i..i+4].try_into().unwrap());
+        i += 4;
+        self.current_pwr.aft_right = f32::from_be_bytes(rx_buf[i..i+4].try_into().unwrap());
+        i += 4;
 
         check_crc(MsgType::Params, &rx_buf)?;
 

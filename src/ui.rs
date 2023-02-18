@@ -434,7 +434,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
     let mut engine_updates = EngineUpdates::default();
 
-    let panel = egui::TopBottomPanel::bottom("UI panel"); // ID must be unique among panels.
+    let panel = egui::SidePanel::left("UI panel"); // ID must be unique among panels.
 
     panel.show(ctx, |ui| {
         engine_updates.ui_size = ui.available_height();
@@ -448,6 +448,13 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
         ui.spacing_mut().item_spacing = egui::vec2(ITEM_SPACING_X, ITEM_SPACING_Y);
 
         // ui.heading("AnyLeaf Preflight");
+
+        let aircraft_type = match state.aircraft_type {
+            AircraftType::Quadcopter => "Quadcopter",
+            AircraftType::FixedWing => "Fixed wing",
+        };
+
+        ui.heading(format!("Aircraft type: {}", aircraft_type));
 
         ui.heading("System status"); // todo: Get this from FC; update on both sides.
 
@@ -663,29 +670,56 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
         ui.heading("Motor power settings and RPM");
 
+        // todo: Color-code power and perhaps RPM.
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.label("Motor 1 power");
+                ui.label(format!("{:.3}", &state.current_pwr.front_left));
+            });
+            ui.add_space(SPACING_HORIZONTAL);
+
+            ui.vertical(|ui| {
+                ui.label("Motor 2 power");
+                ui.label(format!("{:.3}", &state.current_pwr.front_right));
+            });
+            ui.add_space(SPACING_HORIZONTAL);
+
+            ui.vertical(|ui| {
+                ui.label("Motor 3 power");
+                ui.label(format!("{:.3}", &state.current_pwr.aft_left));
+            });
+            ui.add_space(SPACING_HORIZONTAL);
+
+            ui.vertical(|ui| {
+                ui.label("Motor 4 Rpower");
+                ui.label(format!("{:.3}", &state.current_pwr.aft_right));
+            });
+        });
+
+
         // todo: Motors 1-4 vs positions?
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.label("Motor 1 RPM");
-                ui.label(&format_rpm(state.rpm1));
+                ui.label(&format_rpm(state.rpm_readings.front_left));
             });
             ui.add_space(SPACING_HORIZONTAL);
 
             ui.vertical(|ui| {
                 ui.label("Motor 2 RPM");
-                ui.label(&format_rpm(state.rpm2));
+                ui.label(&format_rpm(state.rpm_readings.front_right));
             });
             ui.add_space(SPACING_HORIZONTAL);
 
             ui.vertical(|ui| {
                 ui.label("Motor 3 RPM");
-                ui.label(&format_rpm(state.rpm3));
+                ui.label(&format_rpm(state.rpm_readings.aft_left));
             });
             ui.add_space(SPACING_HORIZONTAL);
 
             ui.vertical(|ui| {
                 ui.label("Motor 4 RPM");
-                ui.label(&format_rpm(state.rpm3));
+                ui.label(&format_rpm(state.rpm_readings.aft_right));
             });
         });
 
@@ -805,7 +839,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
                 ui.add_space(SPACE_BETWEEN_SECTIONS);
             }
-            AircraftType::FlyingWing => {
+            AircraftType::FixedWing => {
                 ui.heading("Servo commands");
 
                 ui.add_space(SPACE_BETWEEN_SECTIONS);
