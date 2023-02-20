@@ -37,7 +37,7 @@ const DISCONNECTED_TIMEOUT_MS: u64 = 500;
 // todo without explicitly requesting here?
 // todo: Also: multiple intervals for different sorts of data, eg update
 // todo attitude at a higher rate than other things.
-const READ_INTERVAL: f32 = 0.01;
+const READ_INTERVAL: f32 = 0.1;
 const READ_INTERVAL_MS: u128 = (READ_INTERVAL * 1_000.) as u128;
 
 struct CrcError {}
@@ -86,6 +86,8 @@ pub struct State {
     pub batt_cell_count: BattCellCount,
     interface: SerialInterface,
     current_pwr: MotorPower,
+    pub pwr_commanded_from_ui: MotorPower,
+    pub rpms_commanded_from_ui: MotorRpms,
 }
 
 impl Default for State {
@@ -127,7 +129,8 @@ impl Default for State {
             batt_cell_count: Default::default(),
             interface: SerialInterface::new(),
             current_pwr: Default::default(),
-
+            pwr_commanded_from_ui: Default::default(),
+            rpms_commanded_from_ui: Default::default(),
         }
     }
 }
@@ -235,8 +238,7 @@ impl State {
         i += F32_SIZE;
 
         self.rpm_readings.front_left = match rx_buf[i] {
-            1 =>
-                Some(u16::from_be_bytes(rx_buf[i + 1..i + 3].try_into().unwrap())),
+            1 => Some(u16::from_be_bytes(rx_buf[i + 1..i + 3].try_into().unwrap())),
             _ => None,
         };
         i += 3;
@@ -256,20 +258,20 @@ impl State {
 
         self.rpm_readings.aft_right = match rx_buf[i] {
             1 => Some(u16::from_be_bytes(rx_buf[i + 1..i + 3].try_into().unwrap())),
-            _ => None
+            _ => None,
         };
         i += 3;
 
         self.aircraft_type = rx_buf[i].try_into().unwrap();
         i += 1;
 
-        self.current_pwr.front_left = f32::from_be_bytes(rx_buf[i..i+4].try_into().unwrap());
+        self.current_pwr.front_left = f32::from_be_bytes(rx_buf[i..i + 4].try_into().unwrap());
         i += 4;
-        self.current_pwr.aft_left = f32::from_be_bytes(rx_buf[i..i+4].try_into().unwrap());
+        self.current_pwr.aft_left = f32::from_be_bytes(rx_buf[i..i + 4].try_into().unwrap());
         i += 4;
-        self.current_pwr.front_right = f32::from_be_bytes(rx_buf[i..i+4].try_into().unwrap());
+        self.current_pwr.front_right = f32::from_be_bytes(rx_buf[i..i + 4].try_into().unwrap());
         i += 4;
-        self.current_pwr.aft_right = f32::from_be_bytes(rx_buf[i..i+4].try_into().unwrap());
+        self.current_pwr.aft_right = f32::from_be_bytes(rx_buf[i..i + 4].try_into().unwrap());
         i += 4;
 
         check_crc(MsgType::Params, &rx_buf)?;

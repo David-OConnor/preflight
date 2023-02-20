@@ -8,7 +8,9 @@ use egui::{self, Button, Color32, ComboBox, CursorIcon::Default, ProgressBar, Ri
 use graphics::{EngineUpdates, Scene};
 
 use crate::{
-    types::{AircraftType, AltType, ArmStatus, LinkStats, SensorStatus, YawAssist},
+    types::{
+        AircraftType, AltType, ArmStatus, LinkStats, MotorPower, MotorRpms, SensorStatus, YawAssist,
+    },
     BattCellCount, RotorPosition, State,
 };
 
@@ -21,14 +23,16 @@ const SPACING_HORIZONTAL: f32 = 26.;
 const SPACING_HORIZONTAL_TIGHT: f32 = 16.;
 const CONTROL_BAR_WIDTH: f32 = 200.; // eg pitch, roll, yaw, throttle control.
 const BATT_LIFE_WIDTH: f32 = 200.; // eg pitch, roll, yaw, throttle control.
-const MOTOR_MAPPING_DROPDOWN_WIDTH: f32 = 100.;
+const MOTOR_MAPPING_DROPDOWN_WIDTH: f32 = 90.;
+const MIN_UI_WIDTH: f32 = 800.;
+const SLIDER_WIDTH: f32 = 200.;
 
 impl SensorStatus {
     // Note Not included in Corvus
     fn as_str(&self) -> &str {
         match self {
             Self::Pass => "Pass",
-            Self::Fail => "Failure",
+            Self::Fail => "Fail",
             Self::NotConnected => "Not connected",
         }
     }
@@ -38,6 +42,15 @@ impl SensorStatus {
             Self::Pass => Color32::LIGHT_GREEN,
             Self::Fail => Color32::LIGHT_RED,
             Self::NotConnected => Color32::GOLD,
+        }
+    }
+
+    /// For systems that are required, or are very important to fly.
+    fn as_color_critical_system(&self) -> Color32 {
+        match self {
+            Self::Pass => Color32::LIGHT_GREEN,
+            Self::Fail => Color32::LIGHT_RED,
+            Self::NotConnected => Color32::LIGHT_RED,
         }
     }
 }
@@ -111,7 +124,7 @@ fn tx_pwr_from_val(val: u8) -> String {
         7 => "250mW",
         _ => "(Unknown)",
     }
-    .to_owned()
+        .to_owned()
 }
 
 enum LatLon {
@@ -166,10 +179,16 @@ fn format_ap_bool(v: bool) -> String {
 }
 
 /// Add a sensor status indicator.
-fn add_sensor_status(label: &str, val: SensorStatus, ui: &mut Ui) {
+fn add_sensor_status(label: &str, val: SensorStatus, ui: &mut Ui, critical: bool) {
+    let color = if critical {
+        val.as_color_critical_system()
+    } else {
+        val.as_color()
+    };
+
     ui.vertical(|ui| {
         ui.label(label);
-        ui.label(RichText::new(val.as_str()).color(val.as_color()));
+        ui.label(RichText::new(val.as_str()).color(color));
     });
     ui.add_space(SPACING_HORIZONTAL);
 }
@@ -266,6 +285,34 @@ fn add_not_connected_page(ui: &mut Ui) {
     let text = "No data received from the flight controller";
     ui.heading(RichText::new(text).color(Color32::GOLD).size(60.));
     ui.add_space(300.); // So not aligned to bottom of the window.
+}
+
+fn add_motor_commands(ui: &mut Ui, power: &mut MotorPower, rpms: &mut MotorRpms) {
+    ui.heading(
+        "Send commands to motors. ⚠️Warning: Causes motors to spin. Disconnect all \
+                propellers before using.⚠️",
+    );
+
+    for (motor_pwr, label) in [
+        (&mut power.front_left, "Front left power"),
+        (&mut power.front_right, "Front right power"),
+        (&mut power.aft_left, "Aft left power"),
+        (&mut power.aft_right, "Aft right power"),
+    ]
+        .into_iter()
+    {
+        ui.add(
+            // Offsets are to avoid gimball lock.
+            egui::Slider::from_get_set(0.0..=1.0, |v| {
+                if let Some(v_) = v {
+                    *motor_pwr = v_ as f32;
+                }
+
+                *motor_pwr as f64
+            })
+                .text(label),
+        );
+    }
 }
 
 /// From Corvus
@@ -434,7 +481,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
     let mut engine_updates = EngineUpdates::default();
 
-    let panel = egui::SidePanel::left("UI panel"); // ID must be unique among panels.
+    let panel = egui::SidePanel::left("UI panel").min_width(MIN_UI_WIDTH); // ID must be unique among panels.
 
     panel.show(ctx, |ui| {
         engine_updates.ui_size = ui.available_height();
@@ -446,6 +493,8 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
         // ui.vscroll(true);
 
         ui.spacing_mut().item_spacing = egui::vec2(ITEM_SPACING_X, ITEM_SPACING_Y);
+
+        ui.spacing_mut().slider_width = SLIDER_WIDTH;
 
         // ui.heading("AnyLeaf Preflight");
 
@@ -459,14 +508,24 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
         ui.heading("System status"); // todo: Get this from FC; update on both sides.
 
         ui.horizontal(|ui| {
-            add_sensor_status("IMU: ", state.system_status.imu, ui);
-            add_sensor_status("RF control link: ", state.system_status.rf_control_link, ui);
-            add_sensor_status("RPM readings: ", state.system_status.esc_rpm, ui);
-            add_sensor_status("Baro altimeter: ", state.system_status.baro, ui);
-            add_sensor_status("AGL altimeter: ", state.system_status.tof, ui);
-            add_sensor_status("GNSS (ie GPS): ", state.system_status.gps, ui);
-            add_sensor_status("Magnetometer: ", state.system_status.magnetometer, ui);
-            add_sensor_status("SPI flash: ", state.system_status.flash_spi, ui);
+            add_sensor_status("IMU: ", state.system_status.imu, ui, true);
+            add_sensor_status(
+                "RF control link: ",
+                state.system_status.rf_control_link,
+                ui,
+                true,
+            );
+            add_sensor_status("RPM readings: ", state.system_status.esc_rpm, ui, true);
+            add_sensor_status("Baro altimeter: ", state.system_status.baro, ui, false);
+            add_sensor_status("AGL altimeter: ", state.system_status.tof, ui, false);
+            add_sensor_status("GNSS (ie GPS): ", state.system_status.gps, ui, false);
+            add_sensor_status(
+                "Magnetometer: ",
+                state.system_status.magnetometer,
+                ui,
+                false,
+            );
+            add_sensor_status("SPI flash: ", state.system_status.flash_spi, ui, false);
             // add_sensor_status("ESC telemetry: ", state.system_status.esc_telemetry, ui);
 
             // todo: Probably a separate row for faults?
@@ -696,148 +755,108 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
             });
         });
 
-
         // todo: Motors 1-4 vs positions?
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.label("Motor 1 RPM");
-                ui.label(&format_rpm(state.rpm_readings.front_left));
-            });
-            ui.add_space(SPACING_HORIZONTAL);
-
-            ui.vertical(|ui| {
-                ui.label("Motor 2 RPM");
-                ui.label(&format_rpm(state.rpm_readings.front_right));
-            });
-            ui.add_space(SPACING_HORIZONTAL);
-
-            ui.vertical(|ui| {
-                ui.label("Motor 3 RPM");
-                ui.label(&format_rpm(state.rpm_readings.aft_left));
-            });
-            ui.add_space(SPACING_HORIZONTAL);
-
-            ui.vertical(|ui| {
-                ui.label("Motor 4 RPM");
-                ui.label(&format_rpm(state.rpm_readings.aft_right));
-            });
-        });
 
         ui.add_space(SPACE_BETWEEN_SECTIONS);
 
         match state.aircraft_type {
             AircraftType::Quadcopter => {
-                ui.heading("Motor mapping");
-
-                // todo: Warning color
-                if ui
-                    .add(
-                        Button::new(RichText::new("Change motor mapping").color(Color32::BLACK))
-                            .fill(Color32::from_rgb(220, 120, 10)),
-                    )
-                    .clicked()
-                {
-                    state.editing_motor_mapping = !state.editing_motor_mapping;
-                };
-
-                // todo: Helper fns here to reduce rep
-                if state.editing_motor_mapping {
+                ui.horizontal(|ui| {
                     ui.horizontal(|ui| {
-                        // todo: For now, only set up for quad
                         ui.vertical(|ui| {
-                            ui.label("Motor 1");
-                            ui.label(state.control_mapping_quad.m1.as_str());
-
-                            let mut selected = &mut state.control_mapping_quad.m1_reversed;
-                            ComboBox::from_id_source(0)
-                                .width(MOTOR_MAPPING_DROPDOWN_WIDTH)
-                                .selected_text(motor_dir_format(*selected))
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(selected, false, "Normal");
-                                    ui.selectable_value(selected, true, "Reversed");
-                                });
+                            ui.label("Motor 1 RPM");
+                            ui.label(&format_rpm(state.rpm_readings.front_left));
                         });
                         ui.add_space(SPACING_HORIZONTAL);
 
                         ui.vertical(|ui| {
-                            ui.label("Motor 2");
-                            ui.label(state.control_mapping_quad.m1.as_str());
-
-                            let mut selected = &mut state.control_mapping_quad.m2_reversed;
-                            ComboBox::from_id_source(1)
-                                .width(MOTOR_MAPPING_DROPDOWN_WIDTH)
-                                .selected_text(motor_dir_format(*selected))
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(selected, false, "Normal");
-                                    ui.selectable_value(selected, true, "Reversed");
-                                });
+                            ui.label("Motor 2 RPM");
+                            ui.label(&format_rpm(state.rpm_readings.front_right));
                         });
                         ui.add_space(SPACING_HORIZONTAL);
 
                         ui.vertical(|ui| {
-                            ui.label("Motor 3");
-                            ui.label(state.control_mapping_quad.m1.as_str());
-
-                            let mut selected = &mut state.control_mapping_quad.m3_reversed;
-                            ComboBox::from_id_source(2)
-                                .width(MOTOR_MAPPING_DROPDOWN_WIDTH)
-                                .selected_text(motor_dir_format(*selected))
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(selected, false, "Normal");
-                                    ui.selectable_value(selected, true, "Reversed");
-                                });
+                            ui.label("Motor 3 RPM");
+                            ui.label(&format_rpm(state.rpm_readings.aft_left));
                         });
                         ui.add_space(SPACING_HORIZONTAL);
 
                         ui.vertical(|ui| {
-                            ui.label("Motor 4");
-                            ui.label(state.control_mapping_quad.m1.as_str());
-
-                            let mut selected = &mut state.control_mapping_quad.m4_reversed;
-                            ComboBox::from_id_source(3)
-                                .width(MOTOR_MAPPING_DROPDOWN_WIDTH)
-                                .selected_text(motor_dir_format(*selected))
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(selected, false, "Normal");
-                                    ui.selectable_value(selected, true, "Reversed");
-                                });
+                            ui.label("Motor 4 RPM");
+                            ui.label(&format_rpm(state.rpm_readings.aft_right));
                         });
-                        ui.add_space(SPACING_HORIZONTAL);
                     });
-                } else {
-                    ui.horizontal(|ui| {
-                        // todo: For now, only set up for quad
-                        ui.vertical(|ui| {
-                            ui.label("Motor 1");
-                            ui.label(state.control_mapping_quad.m1.as_str());
-                            ui.label(motor_dir_format(state.control_mapping_quad.m1_reversed));
-                        });
-                        ui.add_space(SPACING_HORIZONTAL);
 
-                        ui.vertical(|ui| {
-                            ui.label("Motor 2");
-                            ui.label(state.control_mapping_quad.m2.as_str());
-                            ui.label(motor_dir_format(state.control_mapping_quad.m2_reversed));
-                        });
-                        ui.add_space(SPACING_HORIZONTAL);
+                    ui.vertical(|ui| {
+                        ui.heading("Motor mapping");
 
-                        ui.vertical(|ui| {
-                            ui.label("Motor 3");
-                            ui.label(state.control_mapping_quad.m3.as_str());
-                            ui.label(motor_dir_format(state.control_mapping_quad.m3_reversed));
-                        });
-                        ui.add_space(SPACING_HORIZONTAL);
+                        // todo: Warning color
+                        if ui
+                            .add(
+                                Button::new(
+                                    RichText::new("Change motor mapping").color(Color32::BLACK),
+                                )
+                                    .fill(Color32::from_rgb(220, 120, 10)),
+                            )
+                            .clicked()
+                        {
+                            state.editing_motor_mapping = !state.editing_motor_mapping;
+                        };
 
-                        ui.vertical(|ui| {
-                            ui.label("Motor 4");
-                            ui.label(state.control_mapping_quad.m4.as_str());
-                            ui.label(motor_dir_format(state.control_mapping_quad.m4_reversed));
-                        });
-                        ui.add_space(SPACING_HORIZONTAL);
+                        if state.editing_motor_mapping {
+                            ui.horizontal(|ui| {
+
+                                for (label, value, reversed, id) in [
+                                    ("Motor 1", state.control_mapping_quad.m1, &mut state.control_mapping_quad.m1_reversed, 0),
+                                    ("Motor 2", state.control_mapping_quad.m2, &mut state.control_mapping_quad.m2_reversed, 1),
+                                    ("Motor 3", state.control_mapping_quad.m3, &mut state.control_mapping_quad.m3_reversed, 2),
+                                    ("Motor 4", state.control_mapping_quad.m4, &mut state.control_mapping_quad.m4_reversed, 3),
+                                ].into_iter() {
+
+                                    // todo: For now, only set up for quad
+                                    ui.vertical(|ui| {
+                                        ui.label(label);
+                                        ui.label(value.as_str());
+
+                                        let mut selected = reversed;
+                                        ComboBox::from_id_source(id)
+                                            .width(MOTOR_MAPPING_DROPDOWN_WIDTH)
+                                            .selected_text(motor_dir_format(*selected))
+                                            .show_ui(ui, |ui| {
+                                                ui.selectable_value(selected, false, "Normal");
+                                                ui.selectable_value(selected, true, "Reversed");
+                                            });
+                                    });
+                                    ui.add_space(SPACING_HORIZONTAL);
+                                }
+                            });
+                        } else {
+                            ui.horizontal(|ui| {
+                                for (label, value, reversed) in [
+                                    ("Motor 1", state.control_mapping_quad.m1, state.control_mapping_quad.m1_reversed),
+                                    ("Motor 2", state.control_mapping_quad.m2, state.control_mapping_quad.m2_reversed),
+                                    ("Motor 3", state.control_mapping_quad.m3, state.control_mapping_quad.m3_reversed),
+                                    ("Motor 4", state.control_mapping_quad.m4, state.control_mapping_quad.m4_reversed),
+                                ].into_iter() {
+                                    ui.vertical(|ui| {
+                                        ui.label(label);
+                                        ui.label(value.as_str());
+                                        ui.label(motor_dir_format(reversed));
+                                    });
+                                    ui.add_space(SPACING_HORIZONTAL);
+                                }
+                            });
+                        }
                     });
-                }
+                });
 
                 ui.add_space(SPACE_BETWEEN_SECTIONS);
+
+                add_motor_commands(
+                    ui,
+                    &mut state.pwr_commanded_from_ui,
+                    &mut state.rpms_commanded_from_ui,
+                );
             }
             AircraftType::FixedWing => {
                 ui.heading("Servo commands");

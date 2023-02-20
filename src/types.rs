@@ -20,6 +20,8 @@ pub const AP_STATUS_SIZE: usize = 0; // todo
 pub const SYS_AP_STATUS_SIZE: usize = SYS_STATUS_SIZE + AP_STATUS_SIZE;
 pub const CONTROL_MAPPING_QUAD_SIZE: usize = 2; // For quad only atm. Address this.
 
+pub const SET_MOTOR_POWER_SIZE: usize = F32_SIZE * 4;
+
 // Packet sizes are payload size + 2. Additional data are message type, and CRC.
 pub const PARAMS_PACKET_SIZE: usize = PARAMS_SIZE + 2;
 pub const CONTROLS_PACKET_SIZE: usize = CONTROLS_SIZE + 2;
@@ -27,6 +29,8 @@ pub const LINK_STATS_PACKET_SIZE: usize = LINK_STATS_SIZE + 2;
 pub const WAYPOINTS_PACKET_SIZE: usize = WAYPOINTS_SIZE + 2;
 pub const SYS_AP_STATUS_PACKET_SIZE: usize = SYS_AP_STATUS_SIZE + 2;
 pub const CONTROL_MAPPING_QUAD_PACKET_SIZE: usize = CONTROL_MAPPING_QUAD_SIZE + 2;
+
+pub const SET_MOTOR_POWER_PACKET_SIZE: usize = SET_MOTOR_POWER_SIZE + 2;
 
 pub struct DecodeError {}
 
@@ -90,6 +94,8 @@ pub enum MsgType {
     SysApStatus = 17,
     ReqControlMapping = 18,
     ControlMapping = 19,
+    SetMotorPowers = 20,
+    SetMotorRpms = 21,
 }
 
 impl MsgType {
@@ -115,6 +121,8 @@ impl MsgType {
             Self::SysApStatus => SYS_AP_STATUS_SIZE,
             Self::ReqControlMapping => 0,
             Self::ControlMapping => CONTROL_MAPPING_QUAD_SIZE,
+            Self::SetMotorPowers => SET_MOTOR_POWER_SIZE,
+            Self::SetMotorRpms => SET_MOTOR_POWER_SIZE,
         }
     }
 }
@@ -509,6 +517,15 @@ impl BattCellCount {
 /// Represents power levels for the rotors. These map from 0. to 1.; 0% to 100% power.
 #[derive(Clone, Default)]
 pub struct MotorPower {
+    pub front_left: f32,
+    pub front_right: f32,
+    pub aft_left: f32,
+    pub aft_right: f32,
+}
+
+/// Represents power levels for the rotors. These map from 0. to 1.; 0% to 100% power.
+#[derive(Clone, Default)]
+pub struct MotorRpms {
     pub front_left: f32,
     pub front_right: f32,
     pub aft_left: f32,

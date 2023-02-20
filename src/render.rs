@@ -19,13 +19,12 @@ use lin_alg2::{
 
 // todo: Fake horizon in background
 
-use crate::{render, ui, SerialInterface, State, READ_INTERVAL_MS, DISCONNECTED_TIMEOUT_MS};
+use crate::{render, ui, SerialInterface, State, DISCONNECTED_TIMEOUT_MS, READ_INTERVAL_MS};
 
 pub const BACKGROUND_COLOR: (f32, f32, f32) = (0.9, 0.9, 0.9);
 const WINDOW_TITLE: &str = "Corvus Preflight";
 const WINDOW_WIDTH: f32 = 1_400.;
 const WINDOW_HEIGHT: f32 = 1_000.;
-
 
 // fn make_render_handler() -> impl FnMut(&mut State, &mut Scene) -> bool {
 fn render_handler(state: &mut State, scene: &mut Scene, dt: f32) -> EngineUpdates {
@@ -56,7 +55,9 @@ fn render_handler(state: &mut State, scene: &mut Scene, dt: f32) -> EngineUpdate
         }
 
         // todo: Don't hard-code this: Use a const etc for the thresh
-        if (Instant::now() - state.last_fc_response) > Duration::from_millis(DISCONNECTED_TIMEOUT_MS) {
+        if (Instant::now() - state.last_fc_response)
+            > Duration::from_millis(DISCONNECTED_TIMEOUT_MS)
+        {
             state.connected_to_fc = false;
         };
     }
@@ -125,8 +126,8 @@ fn make_aircraft_mesh() -> graphics::Mesh {
         [3, 4, 5],    // b
         [6, 7, 9],    // aft 1
         [7, 8, 9],    // aft 2
-        [10, 13, 12], // fl1
-        [10, 12, 11], // fl2
+        [10, 11, 12], // fl1
+        [10, 12, 13], // fl2
         [14, 16, 17], // fr1
         [14, 15, 16], // fr2
     ];
@@ -135,7 +136,7 @@ fn make_aircraft_mesh() -> graphics::Mesh {
     for face in &faces {
         indices.append(&mut vec![
             // face[0], face[1], face[2], face[0], face[2], face[3],
-            face[0], face[1], face[2]
+            face[0], face[1], face[2],
         ]);
     }
 
