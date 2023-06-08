@@ -9,7 +9,8 @@ use graphics::{EngineUpdates, Scene};
 
 use crate::{
     types::{
-        AircraftType, AltType, ArmStatus, LinkStats, MotorPower, MotorRpms, SensorStatus, YawAssist,
+        AircraftType, AltType, ArmStatus, LinkStats, MotorPower, MotorRpms, MsgType, SensorStatus,
+        YawAssist,
     },
     BattCellCount, RotorPosition, State,
 };
@@ -124,7 +125,7 @@ fn tx_pwr_from_val(val: u8) -> String {
         7 => "250mW",
         _ => "(Unknown)",
     }
-        .to_owned()
+    .to_owned()
 }
 
 enum LatLon {
@@ -299,7 +300,7 @@ fn add_motor_commands(ui: &mut Ui, power: &mut MotorPower, rpms: &mut MotorRpms)
         (&mut power.aft_left, "Aft left power"),
         (&mut power.aft_right, "Aft right power"),
     ]
-        .into_iter()
+    .into_iter()
     {
         ui.add(
             // Offsets are to avoid gimball lock.
@@ -310,7 +311,7 @@ fn add_motor_commands(ui: &mut Ui, power: &mut MotorPower, rpms: &mut MotorRpms)
 
                 *motor_pwr as f64
             })
-                .text(label),
+            .text(label),
         );
     }
 }
@@ -486,7 +487,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
     panel.show(ctx, |ui| {
         engine_updates.ui_size = ui.available_height();
 
-        if !state.connected_to_fc {
+        if !state.common.connected {
             add_not_connected_page(ui);
             return; // todo?
         }
@@ -796,7 +797,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                                 Button::new(
                                     RichText::new("Change motor mapping").color(Color32::BLACK),
                                 )
-                                    .fill(Color32::from_rgb(220, 120, 10)),
+                                .fill(Color32::from_rgb(220, 120, 10)),
                             )
                             .clicked()
                         {
@@ -805,14 +806,34 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
                         if state.editing_motor_mapping {
                             ui.horizontal(|ui| {
-
                                 for (label, value, reversed, id) in [
-                                    ("Motor 1", state.control_mapping_quad.m1, &mut state.control_mapping_quad.m1_reversed, 0),
-                                    ("Motor 2", state.control_mapping_quad.m2, &mut state.control_mapping_quad.m2_reversed, 1),
-                                    ("Motor 3", state.control_mapping_quad.m3, &mut state.control_mapping_quad.m3_reversed, 2),
-                                    ("Motor 4", state.control_mapping_quad.m4, &mut state.control_mapping_quad.m4_reversed, 3),
-                                ].into_iter() {
-
+                                    (
+                                        "Motor 1",
+                                        state.control_mapping_quad.m1,
+                                        &mut state.control_mapping_quad.m1_reversed,
+                                        0,
+                                    ),
+                                    (
+                                        "Motor 2",
+                                        state.control_mapping_quad.m2,
+                                        &mut state.control_mapping_quad.m2_reversed,
+                                        1,
+                                    ),
+                                    (
+                                        "Motor 3",
+                                        state.control_mapping_quad.m3,
+                                        &mut state.control_mapping_quad.m3_reversed,
+                                        2,
+                                    ),
+                                    (
+                                        "Motor 4",
+                                        state.control_mapping_quad.m4,
+                                        &mut state.control_mapping_quad.m4_reversed,
+                                        3,
+                                    ),
+                                ]
+                                .into_iter()
+                                {
                                     // todo: For now, only set up for quad
                                     ui.vertical(|ui| {
                                         ui.label(label);
@@ -833,11 +854,29 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                         } else {
                             ui.horizontal(|ui| {
                                 for (label, value, reversed) in [
-                                    ("Motor 1", state.control_mapping_quad.m1, state.control_mapping_quad.m1_reversed),
-                                    ("Motor 2", state.control_mapping_quad.m2, state.control_mapping_quad.m2_reversed),
-                                    ("Motor 3", state.control_mapping_quad.m3, state.control_mapping_quad.m3_reversed),
-                                    ("Motor 4", state.control_mapping_quad.m4, state.control_mapping_quad.m4_reversed),
-                                ].into_iter() {
+                                    (
+                                        "Motor 1",
+                                        state.control_mapping_quad.m1,
+                                        state.control_mapping_quad.m1_reversed,
+                                    ),
+                                    (
+                                        "Motor 2",
+                                        state.control_mapping_quad.m2,
+                                        state.control_mapping_quad.m2_reversed,
+                                    ),
+                                    (
+                                        "Motor 3",
+                                        state.control_mapping_quad.m3,
+                                        state.control_mapping_quad.m3_reversed,
+                                    ),
+                                    (
+                                        "Motor 4",
+                                        state.control_mapping_quad.m4,
+                                        state.control_mapping_quad.m4_reversed,
+                                    ),
+                                ]
+                                .into_iter()
+                                {
                                     ui.vertical(|ui| {
                                         ui.label(label);
                                         ui.label(value.as_str());
@@ -857,6 +896,49 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                     &mut state.pwr_commanded_from_ui,
                     &mut state.rpms_commanded_from_ui,
                 );
+
+                if ui
+                    .add(
+                        Button::new(RichText::new("Start Motors").color(Color32::BLACK))
+                            .fill(Color32::from_rgb(220, 120, 10)),
+                    )
+                    .clicked()
+                {
+                    // todo: DRY with port. Trouble passing it as a param due to box<dyn
+                    match state.interface.serial_port.as_mut() {
+                        Some(p) => {
+                            crate::send_payload::<{ 2 }>(MsgType::StartMotors, &[], p).ok();
+                        }
+                        None => {
+                            // return Err(io::Error::new(
+                            //     io::ErrorKind::NotConnected,
+                            //     "Flight controller not connected",
+                            // ))
+                        }
+                    }
+                };
+
+                // todo: DRY. Use a loop.(?)
+
+                if ui
+                    .add(
+                        Button::new(RichText::new("Stop Motors").color(Color32::BLACK))
+                            .fill(Color32::from_rgb(220, 120, 10)),
+                    )
+                    .clicked()
+                {
+                    match state.interface.serial_port.as_mut() {
+                        Some(p) => {
+                            crate::send_payload::<{ 2 }>(MsgType::StopMotors, &[], p).ok();
+                        }
+                        None => {
+                            // return Err(io::Error::new(
+                            //     io::ErrorKind::NotConnected,
+                            //     "Flight controller not connected",
+                            // ))
+                        }
+                    }
+                };
             }
             AircraftType::FixedWing => {
                 ui.heading("Servo commands");

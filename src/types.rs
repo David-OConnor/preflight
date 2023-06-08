@@ -34,9 +34,6 @@ pub const SET_MOTOR_POWER_PACKET_SIZE: usize = SET_MOTOR_POWER_SIZE + 2;
 
 pub struct DecodeError {}
 
-// Time between querying the FC for readings, in ms.
-pub const REFRESH_INTERVAL: u32 = 50;
-
 use num_enum::TryFromPrimitive; // Enum from integer
 
 // Note that serialize, and for ArmStatus, default, are not part of the firmware
@@ -84,8 +81,8 @@ pub enum MsgType {
     ReqLinkStats = 7,
     ArmMotors = 8,
     DisarmMotors = 9,
-    StartMotor = 10,
-    StopMotor = 11,
+    StartMotors = 10,
+    StopMotors = 11,
     ReqWaypoints = 12,
     Updatewaypoints = 13,
     Waypoints = 14,
@@ -111,8 +108,8 @@ impl MsgType {
             Self::ReqLinkStats => 0,
             Self::ArmMotors => 0,
             Self::DisarmMotors => 0,
-            Self::StartMotor => 1,
-            Self::StopMotor => 1,
+            Self::StartMotors => 0,
+            Self::StopMotors => 0,
             Self::ReqWaypoints => 0,
             Self::Updatewaypoints => 10, // todo?
             Self::Waypoints => WAYPOINTS_SIZE,
@@ -209,41 +206,6 @@ impl Default for RotationDir {
     fn default() -> Self {
         Self::Clockwise
     }
-}
-
-pub const fn crc_init(poly: u8) -> [u8; 256] {
-    let mut lut = [0; 256];
-
-    let mut i = 0;
-    while i < 256 {
-        // Can't use for loops in const fns
-        let mut crc = i as u8;
-
-        let mut j = 0;
-        while j < 8 {
-            crc = (crc << 1) ^ (if (crc & 0x80) > 0 { poly } else { 0 });
-            j += 1;
-        }
-        lut[i] = crc;
-
-        i += 1;
-    }
-
-    lut
-}
-
-/// CRC8 using a specific poly, includes all bytes from type (buffer[2]) to end of payload.
-/// https://github.com/chris1seto/OzarkRiver/blob/4channel/FlightComputerFirmware/Src/Crsf.c
-pub fn calc_crc(lut: &[u8; 256], data: &[u8], mut size: u8) -> u8 {
-    let mut crc = 0;
-    let mut i = 0;
-
-    while size > 0 {
-        size -= 1;
-        crc = lut[(crc ^ data[i]) as usize];
-        i += 1;
-    }
-    crc
 }
 
 #[derive(Clone, Copy, Default)]

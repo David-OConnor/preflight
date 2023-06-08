@@ -1,9 +1,10 @@
 //! This module contains code related to the 3D render (Aircraft attitude depiction etc)
 
-use std::time::Duration;
 use std::{
     boxed::Box,
+    f32::consts::TAU,
     sync::atomic::{AtomicUsize, Ordering},
+    time::Duration,
     time::Instant,
 };
 
@@ -17,6 +18,10 @@ use lin_alg2::{
     f32::{Quaternion, Vec3},
 };
 
+use pc_interface_shared::{
+    ConnectionStatus, ConnectionType, Port, SerialInterface, DISCONNECTED_TIMEOUT_MS,
+};
+
 // todo: Fake horizon in background
 
 use crate::{render, ui, SerialInterface, State, DISCONNECTED_TIMEOUT_MS, READ_INTERVAL_MS};
@@ -26,41 +31,58 @@ const WINDOW_TITLE: &str = "Corvus Preflight";
 const WINDOW_WIDTH: f32 = 1_400.;
 const WINDOW_HEIGHT: f32 = 1_000.;
 
+/// Convert from the coordinate system we use on the aircraft, to the one used by the rendering
+/// system.
+fn convert_quat_coords(quat_in: Quaternion) -> Quaternion {
+    Quaternion {
+        w: quat_in.w,
+        x: -quat_in.y,
+        y: quat_in.z,
+        z: -quat_in.x,
+    }
+}
+
 // fn make_render_handler() -> impl FnMut(&mut State, &mut Scene) -> bool {
 fn render_handler(state: &mut State, scene: &mut Scene, dt: f32) -> EngineUpdates {
     // move |state: &mut State, scene: &mut Scene| {
     let mut engine_updates = EngineUpdates::default();
 
-    if state.last_fc_query.elapsed().as_millis() > READ_INTERVAL_MS {
-        // todo: Troubleshooting acces is denied error.
-        state.interface = SerialInterface::new();
+    let now = Instant::now();
 
-        state.last_fc_query = Instant::now();
+    // Request config data
+    if state.common.last_query.elapsed().as_millis() > READ_INTERVAL_MS {
+        state.common.last_query = now;
 
-        match &state.interface.serial_port {
-            Some(_port) => {
-                // state.read_all().unwrap();
-                state.read_all().ok(); // todo temp!
+        if state.common.interface.serial_port.is_none() {
+            println!("No port found; re-opening");
+            // todo: Temp always connect. Don't do that!!
+            state.common.interface = SerialInterface::connect();
+        } else {
+            // println!("Port is open");
+        }
 
-                scene.entities[0].orientation = state.attitude;
+        match state.read_all() {
+            Ok(_) => {
+                println!("Success reading data.");
 
-                scene.entities[1].orientation = state.attitude_commanded;
+                scene.entities[0].orientation = convert_quat_coords(state.attitude);
 
-                state.connected_to_fc = true;
+                scene.entities[1].orientation = convert_quat_coords(state.attitude_commanded);
+
                 state.last_fc_response = Instant::now();
 
                 engine_updates.entities = true;
             }
-            None => {}
+            Err(e) => {
+                println!("Error reading data: {:?}", e);
+            }
         }
-
-        // todo: Don't hard-code this: Use a const etc for the thresh
-        if (Instant::now() - state.last_fc_response)
-            > Duration::from_millis(DISCONNECTED_TIMEOUT_MS)
-        {
-            state.connected_to_fc = false;
-        };
     }
+
+    if (now - state.common.last_response) > Duration::from_millis(DISCONNECTED_TIMEOUT_MS) {
+        state.common.connection_status = ConnectionStatus::NotConnected;
+    };
+
     engine_updates
 }
 
@@ -78,14 +100,17 @@ fn make_aircraft_mesh() -> graphics::Mesh {
     let height = 0.2;
 
     // Top face
-    let fwd_top = [0., height, 1.];
+    let fwd_top = [0., height * 3., 4.];
     let al_top = [-1., height, -1.];
     let ar_top = [1., height, -1.];
 
     // Bottom face
-    let fwd_bt = [0., -height, 1.];
+    let fwd_bt = [0., -height, 4.];
     let al_bt = [-1., -height, -1.];
     let ar_bt = [1., -height, -1.];
+
+    // a point on top
+    // let top_pt = [0., height * 1.3, 0.5];
 
     // Normal vectors
     let aft = Vec3::new(0., 0., -1.);
@@ -153,7 +178,7 @@ pub fn run(state: State) {
         // Aircraft estimated attitude
         Entity::new(
             0,
-            Vec3::new(0., 3., 0.),
+            Vec3::new(0., 2., 0.),
             Quaternion::new_identity(),
             1.,
             (1., 0., 1.),
@@ -162,7 +187,7 @@ pub fn run(state: State) {
         // Commanded attitutde
         Entity::new(
             0,
-            Vec3::new(0., -3., 0.),
+            Vec3::new(0., -2., 0.),
             Quaternion::new_identity(),
             1.,
             (1., 0., 1.),
@@ -180,20 +205,31 @@ pub fn run(state: State) {
         lighting: Lighting {
             ambient_color: [1., 1., 0., 1.],
             ambient_intensity: 0.15,
-            point_lights: vec![PointLight {
-                type_: LightType::Omnidirectional,
-                position: Vec3::new(0., 30., -5.),
-                diffuse_color: [1., 1., 1., 1.],
-                specular_color: [1., 1., 1., 1.],
-                diffuse_intensity: 1000.,
-                specular_intensity: 1000.,
-            }],
+            point_lights: vec![
+                PointLight {
+                    type_: LightType::Omnidirectional,
+                    position: Vec3::new(0., 20., -5.),
+                    diffuse_color: [1., 1., 1., 1.],
+                    specular_color: [1., 1., 1., 1.],
+                    diffuse_intensity: 200.,
+                    specular_intensity: 200.,
+                },
+                PointLight {
+                    type_: LightType::Omnidirectional,
+                    position: Vec3::new(0., -20., -5.),
+                    diffuse_color: [1., 1., 1., 1.],
+                    specular_color: [1., 1., 1., 1.],
+                    diffuse_intensity: 200.,
+                    specular_intensity: 200.,
+                },
+            ],
         },
         background_color: render::BACKGROUND_COLOR,
         window_size: (WINDOW_WIDTH, WINDOW_HEIGHT),
         window_title: WINDOW_TITLE.to_owned(),
         camera: Camera {
             position: Vec3::new(0., 0., -10.),
+            fov_y: TAU / 8.,
             ..Default::default()
         },
     };

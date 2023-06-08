@@ -14,7 +14,7 @@ use std::{
     time::{self, Duration, Instant},
 };
 
-use serialport::{self, SerialPort, SerialPortType};
+use pc_interface_shared::{self, send_cmd_, send_payload};
 
 use lin_alg2::f32::Quaternion;
 use types::*;
@@ -22,14 +22,6 @@ use types::*;
 mod render;
 mod types;
 mod ui;
-
-const FC_SERIAL_NUMBER: &str = "AN";
-
-const BAUD: u32 = 115_200;
-
-const TIMEOUT_MILIS: u64 = 10;
-
-const DISCONNECTED_TIMEOUT_MS: u64 = 500;
 
 // At this interval, in seconds, request new data from the FC.
 // todo: Do you want some (or all?) of the read data to be pushed at a regular
@@ -40,16 +32,9 @@ const DISCONNECTED_TIMEOUT_MS: u64 = 500;
 const READ_INTERVAL: f32 = 0.1;
 const READ_INTERVAL_MS: u128 = (READ_INTERVAL * 1_000.) as u128;
 
-struct CrcError {}
-
-impl From<CrcError> for io::Error {
-    fn from(_e: CrcError) -> Self {
-        Self::new(io::ErrorKind::Other, "CRC")
-    }
-}
-
 /// Data passed by the flight controller
 pub struct State {
+    pub common: pc_interface_shared::StateCommon,
     pub attitude: Quaternion,
     pub attitude_commanded: Quaternion,
     pub controls: Option<ChannelData>,
@@ -71,20 +56,12 @@ pub struct State {
     pub last_link_stats_update: Instant,
     pub system_status: SystemStatus,
     pub aircraft_type: AircraftType,
-    /// Note directly pulled from the FC; usd for sequencing read
-    /// todo: Consider diff update rate (and last query times) for
-    /// todo different types of data.
-    pub last_fc_query: Instant,
-    /// Used for determining if we're still connected, and getting updates from the FC.
-    pub last_fc_response: Instant,
-    pub connected_to_fc: bool,
     // todo: Use an enum for control mapping.
     pub control_mapping_quad: ControlMappingQuad,
     pub control_mapping_fixed_wing: ControlMappingFixedWing,
     // todo: ui_state field?
     pub editing_motor_mapping: bool,
     pub batt_cell_count: BattCellCount,
-    interface: SerialInterface,
     current_pwr: MotorPower,
     pub pwr_commanded_from_ui: MotorPower,
     pub rpms_commanded_from_ui: MotorRpms,
@@ -100,6 +77,7 @@ impl Default for State {
         ];
 
         Self {
+            common: Default::default(),
             attitude: Quaternion::new_identity(),
             attitude_commanded: Quaternion::new_identity(),
             controls: Default::default(),
@@ -120,61 +98,15 @@ impl Default for State {
             last_link_stats_update: Instant::now(),
             system_status: Default::default(),
             aircraft_type: AircraftType::Quadcopter,
-            last_fc_query: Instant::now(),
-            last_fc_response: Instant::now(), // todo: Perhaps a time in the distant past is more apt.
-            connected_to_fc: false,
             control_mapping_quad: Default::default(),
             control_mapping_fixed_wing: Default::default(),
             editing_motor_mapping: false,
             batt_cell_count: Default::default(),
-            interface: SerialInterface::new(),
             current_pwr: Default::default(),
             pwr_commanded_from_ui: Default::default(),
             rpms_commanded_from_ui: Default::default(),
         }
     }
-}
-
-/// C+P from firmware, with minor changes.
-fn send_payload<const N: usize>(
-    msg_type: MsgType,
-    payload: &[u8],
-    port: &mut Box<dyn SerialPort>,
-) -> Result<(), io::Error> {
-    // N is the packet size.
-    let payload_size = msg_type.payload_size();
-
-    let mut tx_buf = [0; N];
-
-    tx_buf[0] = msg_type as u8;
-    tx_buf[1..(payload_size + 1)].copy_from_slice(&payload);
-
-    tx_buf[payload_size + 1] = calc_crc(
-        &CRC_LUT,
-        &tx_buf[..payload_size + 1],
-        payload_size as u8 + 1,
-    );
-
-    port.write_all(&tx_buf)?;
-
-    Ok(())
-}
-
-/// Check CRC on an inbound message.
-fn check_crc(msg_type: MsgType, buf: &[u8]) -> Result<(), CrcError> {
-    // todo: Probably return a suitable error type here.
-    let payload_size = msg_type.payload_size();
-    let crc_read = buf[payload_size + 1];
-
-    let crc_expected = calc_crc(&CRC_LUT, &buf[..payload_size + 1], payload_size as u8 + 1);
-
-    if crc_read != crc_expected {
-        return Err(CrcError {});
-        // todo: Do something else here? Eg don't update self and resend.
-        println!("Incorrect CRC.");
-    }
-
-    Ok(())
 }
 
 impl State {
@@ -274,7 +206,7 @@ impl State {
         self.current_pwr.aft_right = f32::from_be_bytes(rx_buf[i..i + 4].try_into().unwrap());
         i += 4;
 
-        check_crc(MsgType::Params, &rx_buf)?;
+        // check_crc(MsgType::Params, &rx_buf)?;
 
         Ok(())
     }
@@ -303,7 +235,7 @@ impl State {
             rx_buf[1..SYS_AP_STATUS_SIZE + 1].try_into().unwrap();
         self.system_status = sys_status.into();
 
-        check_crc(MsgType::SysApStatus, &rx_buf)?;
+        // check_crc(MsgType::SysApStatus, &rx_buf)?;
 
         Ok(())
     }
@@ -331,7 +263,7 @@ impl State {
         let controls: [u8; CONTROLS_SIZE] = rx_buf[1..CONTROLS_SIZE + 1].try_into().unwrap();
         self.controls = controls_from_buf(controls);
 
-        check_crc(MsgType::Controls, &rx_buf)?;
+        // check_crc(MsgType::Controls, &rx_buf)?;
 
         Ok(())
     }
@@ -359,7 +291,7 @@ impl State {
 
         self.link_stats = link_stats.into();
 
-        check_crc(MsgType::LinkStats, &rx_buf)?;
+        // check_crc(MsgType::LinkStats, &rx_buf)?;
 
         Ok(())
     }
@@ -390,7 +322,7 @@ impl State {
 
         self.waypoints = waypoints_data;
 
-        check_crc(MsgType::Waypoints, &rx_buf)?;
+        // check_crc(MsgType::Waypoints, &rx_buf)?;
 
         // todo: Lat, Lon
 
@@ -423,7 +355,7 @@ impl State {
         // todo: Fixed wing A/R.
         self.control_mapping_quad = control_mapping;
 
-        check_crc(MsgType::ControlMapping, &rx_buf)?;
+        // check_crc(MsgType::ControlMapping, &rx_buf)?;
 
         Ok(())
     }
@@ -484,7 +416,7 @@ impl State {
     // todo: These are incomplete. you need to pass which motor etc.
     pub fn send_start_motor_command(&mut self, motor: RotorPosition) -> Result<(), io::Error> {
         if let Some(port) = self.interface.serial_port.as_mut() {
-            send_payload::<{ 3 }>(MsgType::StartMotor, &[motor as u8], port)
+            send_payload::<{ 3 }>(MsgType::StartMotors, &[motor as u8], port)
         } else {
             Err(io::Error::new(
                 io::ErrorKind::NotConnected,
@@ -495,7 +427,7 @@ impl State {
 
     pub fn send_stop_motor_command(&mut self, motor: RotorPosition) -> Result<(), io::Error> {
         if let Some(port) = self.interface.serial_port.as_mut() {
-            send_payload::<{ 3 }>(MsgType::StopMotor, &[motor as u8], port)
+            send_payload::<{ 3 }>(MsgType::StopMotors, &[motor as u8], port)
         } else {
             Err(io::Error::new(
                 io::ErrorKind::NotConnected,
@@ -662,66 +594,8 @@ pub fn bytes_to_float(bytes: &[u8]) -> f32 {
     f32::from_bits(u32::from_be_bytes(bytes))
 }
 
-/// This mirrors that in the Python driver
-pub struct SerialInterface {
-    /// This `Box<dyn Trait>` is a awk, but part of the `serial_port`. This is for cross-platform
-    /// compatibity, since Windows and Linux use different types; the `serial_port` docs are build
-    /// for Linux, and don't show the Windows type. (ie `TTYPort vs COMPort`)
-    pub serial_port: Option<Box<dyn SerialPort>>,
-}
-
-impl SerialInterface {
-    pub fn new() -> Self {
-        if let Ok(ports) = serialport::available_ports() {
-            for port_info in &ports {
-                if let SerialPortType::UsbPort(info) = &port_info.port_type {
-                    if let Some(sn) = &info.serial_number {
-                        if sn == FC_SERIAL_NUMBER {
-                            match serialport::new(&port_info.port_name, BAUD)
-                                .timeout(Duration::from_millis(TIMEOUT_MILIS))
-                                .open()
-                            {
-                                // }
-                                Ok(port) => {
-                                    // println!("(No access error)");
-                                    return Self {
-                                        serial_port: Some(port),
-                                    };
-                                }
-                                Err(serialport::Error { kind, description }) => {
-                                    match kind {
-                                        // serialport::ErrorKind::Io(io_kind) => {
-                                        //     println!("IO error openin the port");
-                                        // }
-                                        serialport::ErrorKind::NoDevice => {
-                                            // todo: Probably still getting this, but it seems to not
-                                            // todo be a dealbreaker. Eventually deal with it.
-                                            // println!("No device: {:?}", description);
-                                        }
-                                        _ => {
-                                            println!(
-                                                "Error opening the port: {:?} - {:?}",
-                                                kind, description
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                            // .expect("Failed to open serial port");
-                        }
-                    }
-                }
-            }
-        }
-
-        Self { serial_port: None }
-    }
-}
-
 fn main() {
     let mut state = State::default();
-    state.interface = SerialInterface::new();
 
-    // todo: Separate threads for querying FC, and render?
     render::run(state);
 }
