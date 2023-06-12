@@ -720,7 +720,6 @@ dependencies = [
  "lin-alg2",
  "num_enum 0.5.7",
  "pc_interface_shared",
- "serialport",
 ]
 
 [[package]]

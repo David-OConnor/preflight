@@ -1,9 +1,9 @@
 //! This module contains types etc that are copy+pasted from the firmware.
 
-pub const F32_SIZE: usize = 4;
+use anyleaf_usb::MessageType;
+use num_enum::TryFromPrimitive; // Enum from integer
 
-pub const CRC_POLY: u8 = 0xab;
-pub const CRC_LUT: [u8; 256] = crc_init(CRC_POLY);
+pub const F32_SIZE: usize = 4;
 
 pub const QUATERNION_SIZE: usize = F32_SIZE * 4; // Quaternion (4x4 + altimeter + voltage reading + current reading)
 pub const PARAMS_SIZE: usize = 2 * QUATERNION_SIZE + 6 * F32_SIZE + 1 + 4 * 3 + 1 + F32_SIZE * 4;
@@ -33,8 +33,6 @@ pub const CONTROL_MAPPING_QUAD_PACKET_SIZE: usize = CONTROL_MAPPING_QUAD_SIZE + 
 pub const SET_MOTOR_POWER_PACKET_SIZE: usize = SET_MOTOR_POWER_SIZE + 2;
 
 pub struct DecodeError {}
-
-use num_enum::TryFromPrimitive; // Enum from integer
 
 // Note that serialize, and for ArmStatus, default, are not part of the firmware
 
@@ -95,8 +93,12 @@ pub enum MsgType {
     SetMotorRpms = 21,
 }
 
-impl MsgType {
-    pub fn payload_size(&self) -> usize {
+impl MessageType for MsgType {
+    fn val(&self) -> u8 {
+        *self as u8
+    }
+
+    fn payload_size(&self) -> usize {
         match self {
             Self::Params => PARAMS_SIZE,
             Self::SetMotorDirs => 1, // Packed bits: motors 1-4, R-L. True = CW.
@@ -108,8 +110,8 @@ impl MsgType {
             Self::ReqLinkStats => 0,
             Self::ArmMotors => 0,
             Self::DisarmMotors => 0,
-            Self::StartMotors => 0,
-            Self::StopMotors => 0,
+            Self::StartMotors => 1,
+            Self::StopMotors => 1,
             Self::ReqWaypoints => 0,
             Self::Updatewaypoints => 10, // todo?
             Self::Waypoints => WAYPOINTS_SIZE,

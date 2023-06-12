@@ -24,7 +24,7 @@ use pc_interface_shared::{
 
 // todo: Fake horizon in background
 
-use crate::{render, ui, SerialInterface, State, DISCONNECTED_TIMEOUT_MS, READ_INTERVAL_MS};
+use crate::{render, ui, State, READ_INTERVAL_MS};
 
 pub const BACKGROUND_COLOR: (f32, f32, f32) = (0.9, 0.9, 0.9);
 const WINDOW_TITLE: &str = "Corvus Preflight";
@@ -55,7 +55,6 @@ fn render_handler(state: &mut State, scene: &mut Scene, dt: f32) -> EngineUpdate
 
         if state.common.interface.serial_port.is_none() {
             println!("No port found; re-opening");
-            // todo: Temp always connect. Don't do that!!
             state.common.interface = SerialInterface::connect();
         } else {
             // println!("Port is open");
@@ -69,7 +68,8 @@ fn render_handler(state: &mut State, scene: &mut Scene, dt: f32) -> EngineUpdate
 
                 scene.entities[1].orientation = convert_quat_coords(state.attitude_commanded);
 
-                state.last_fc_response = Instant::now();
+                state.common.last_response = Instant::now();
+                state.common.connection_status = ConnectionStatus::Connected;
 
                 engine_updates.entities = true;
             }

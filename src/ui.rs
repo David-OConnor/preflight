@@ -2,10 +2,14 @@
 
 use std::f32::consts::TAU;
 
-use egui::ImageData::Color;
-use egui::{self, Button, Color32, ComboBox, CursorIcon::Default, ProgressBar, RichText, Ui};
+use egui::{
+    self, Button, Color32, ComboBox, CursorIcon::Default, ImageData::Color, ProgressBar, RichText,
+    Ui,
+};
 
 use graphics::{EngineUpdates, Scene};
+
+use pc_interface_shared::{send_cmd, ConnectionStatus};
 
 use crate::{
     types::{
@@ -487,10 +491,14 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
     panel.show(ctx, |ui| {
         engine_updates.ui_size = ui.available_height();
 
-        if !state.common.connected {
-            add_not_connected_page(ui);
-            return; // todo?
+        match state.common.connection_status {
+            ConnectionStatus::Connected => (),
+            ConnectionStatus::NotConnected => {
+                add_not_connected_page(ui);
+                return; // todo?
+            }
         }
+
         // ui.vscroll(true);
 
         ui.spacing_mut().item_spacing = egui::vec2(ITEM_SPACING_X, ITEM_SPACING_Y);
@@ -904,17 +912,11 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                     )
                     .clicked()
                 {
-                    // todo: DRY with port. Trouble passing it as a param due to box<dyn
-                    match state.interface.serial_port.as_mut() {
-                        Some(p) => {
-                            crate::send_payload::<{ 2 }>(MsgType::StartMotors, &[], p).ok();
+                    match state.common.get_port() {
+                        Ok(p) => {
+                            send_cmd::<MsgType>(MsgType::StartMotors, p).ok();
                         }
-                        None => {
-                            // return Err(io::Error::new(
-                            //     io::ErrorKind::NotConnected,
-                            //     "Flight controller not connected",
-                            // ))
-                        }
+                        Err(_) => {}
                     }
                 };
 
@@ -927,16 +929,11 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                     )
                     .clicked()
                 {
-                    match state.interface.serial_port.as_mut() {
-                        Some(p) => {
-                            crate::send_payload::<{ 2 }>(MsgType::StopMotors, &[], p).ok();
+                    match state.common.get_port() {
+                        Ok(p) => {
+                            send_cmd::<MsgType>(MsgType::StopMotors, p).ok();
                         }
-                        None => {
-                            // return Err(io::Error::new(
-                            //     io::ErrorKind::NotConnected,
-                            //     "Flight controller not connected",
-                            // ))
-                        }
+                        Err(_) => {}
                     }
                 };
             }

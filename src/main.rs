@@ -14,7 +14,7 @@ use std::{
     time::{self, Duration, Instant},
 };
 
-use pc_interface_shared::{self, send_cmd_, send_payload};
+use pc_interface_shared::{self, send_cmd, send_payload};
 
 use lin_alg2::f32::Quaternion;
 use types::*;
@@ -30,7 +30,7 @@ mod ui;
 // todo: Also: multiple intervals for different sorts of data, eg update
 // todo attitude at a higher rate than other things.
 const READ_INTERVAL: f32 = 0.1;
-const READ_INTERVAL_MS: u128 = (READ_INTERVAL * 1_000.) as u128;
+pub const READ_INTERVAL_MS: u128 = (READ_INTERVAL * 1_000.) as u128;
 
 /// Data passed by the flight controller
 pub struct State {
@@ -113,18 +113,9 @@ impl State {
     /// Read parameters, such as attitude and altitutde
     // pub fn read_params(&mut self, port: &Box<dyn SerialPort>) -> Result<(), io::Error> {
     pub fn read_params(&mut self) -> Result<(), io::Error> {
-        // todo: DRY with port. Trouble passing it as a param due to box<dyn
-        let port = match self.interface.serial_port.as_mut() {
-            Some(p) => p,
-            None => {
-                return Err(io::Error::new(
-                    io::ErrorKind::NotConnected,
-                    "Flight controller not connected",
-                ))
-            }
-        };
+        let port = self.common.get_port()?;
 
-        send_payload::<{ 2 }>(MsgType::ReqParams, &[], port)?;
+        send_cmd::<MsgType>(MsgType::ReqParams, port)?;
 
         // Read the params passed by the FC in response.
         let mut rx_buf = [0; PARAMS_SIZE + 2];
@@ -215,17 +206,9 @@ impl State {
     // pub fn read_controls(&mut self, port: &Box<dyn SerialPort>) -> Result<(), io::Error> {
     pub fn read_sys_ap_status(&mut self) -> Result<(), io::Error> {
         // todo: DRY with port. Trouble passing it as a param due to box<dyn
-        let port = match self.interface.serial_port.as_mut() {
-            Some(p) => p,
-            None => {
-                return Err(io::Error::new(
-                    io::ErrorKind::NotConnected,
-                    "Flight controller not connected",
-                ))
-            }
-        };
+        let port = self.common.get_port()?;
 
-        send_payload::<{ 2 }>(MsgType::ReqSysApStatus, &[], port)?;
+        send_cmd::<MsgType>(MsgType::ReqSysApStatus, port)?;
 
         // todo: Just sys status for now; do AP too.
         let mut rx_buf = [0; SYS_AP_STATUS_SIZE + 2];
@@ -243,18 +226,9 @@ impl State {
     /// Read control channel data.
     // pub fn read_controls(&mut self, port: &Box<dyn SerialPort>) -> Result<(), io::Error> {
     pub fn read_controls(&mut self) -> Result<(), io::Error> {
-        // todo: DRY with port. Trouble passing it as a param due to box<dyn
-        let port = match self.interface.serial_port.as_mut() {
-            Some(p) => p,
-            None => {
-                return Err(io::Error::new(
-                    io::ErrorKind::NotConnected,
-                    "Flight controller not connected",
-                ))
-            }
-        };
+        let port = self.common.get_port()?;
 
-        send_payload::<{ 2 }>(MsgType::ReqControls, &[], port)?;
+        send_cmd::<MsgType>(MsgType::ReqControls, port)?;
 
         // let mut rx_buf = [0; CONTROLS_SIZE + 2]; // todo: Bogus leading 1?
         let mut rx_buf = [0; CONTROLS_SIZE + 2];
@@ -272,17 +246,9 @@ impl State {
     // pub fn read_link_stats(&mut self, port: &Box<dyn SerialPort>) -> Result<(), io::Error> {
     pub fn read_link_stats(&mut self) -> Result<(), io::Error> {
         // todo: DRY with port. Trouble passing it as a param due to box<dyn
-        let port = match self.interface.serial_port.as_mut() {
-            Some(p) => p,
-            None => {
-                return Err(io::Error::new(
-                    io::ErrorKind::NotConnected,
-                    "Flight controller not connected",
-                ))
-            }
-        };
+        let port = self.common.get_port()?;
 
-        send_payload::<{ 2 }>(MsgType::ReqLinkStats, &[], port)?;
+        send_cmd::<MsgType>(MsgType::ReqLinkStats, port)?;
 
         let mut rx_buf = [0; LINK_STATS_SIZE + 2];
         port.read_exact(&mut rx_buf)?;
@@ -299,18 +265,9 @@ impl State {
     /// Read waypoints data from the flight controller.
     // pub fn read_waypoints(&mut self, port: &Box<dyn SerialPort>) -> Result<(), io::Error> {
     pub fn read_waypoints(&mut self) -> Result<(), io::Error> {
-        // todo: DRY with port. Trouble passing it as a param due to box<dyn
-        let port = match self.interface.serial_port.as_mut() {
-            Some(p) => p,
-            None => {
-                return Err(io::Error::new(
-                    io::ErrorKind::NotConnected,
-                    "Flight controller not connected",
-                ))
-            }
-        };
+        let port = self.common.get_port()?;
 
-        send_payload::<{ 2 }>(MsgType::ReqWaypoints, &[], port)?;
+        send_cmd::<MsgType>(MsgType::ReqWaypoints, port)?;
 
         let mut rx_buf = [0; WAYPOINTS_SIZE + 2];
         port.read_exact(&mut rx_buf)?;
@@ -331,18 +288,9 @@ impl State {
 
     /// Read motor or servo control mapping from the FC.
     pub fn read_control_mapping(&mut self) -> Result<(), io::Error> {
-        // todo: DRY with port. Trouble passing it as a param due to box<dyn
-        let port = match self.interface.serial_port.as_mut() {
-            Some(p) => p,
-            None => {
-                return Err(io::Error::new(
-                    io::ErrorKind::NotConnected,
-                    "Flight controller not connected",
-                ))
-            }
-        };
+        let port = self.common.get_port()?;
 
-        send_payload::<{ 2 }>(MsgType::ReqControlMapping, &[], port)?;
+        send_cmd::<MsgType>(MsgType::ReqControlMapping, port)?;
 
         let mut rx_buf = [0; CONTROL_MAPPING_QUAD_SIZE + 2];
         port.read_exact(&mut rx_buf)?;
@@ -363,21 +311,8 @@ impl State {
     /// Request several types of data from the flight controller over USB serial. Return a struct
     /// containing the data.
     pub fn read_all(&mut self) -> Result<(), io::Error> {
-        let mut port = match self.interface.serial_port.as_mut() {
-            Some(p) => p,
-            None => {
-                return Err(io::Error::new(
-                    io::ErrorKind::NotConnected,
-                    "Flight controller not connected",
-                ))
-            }
-        };
+        // let port = self.common.get_port()?;
 
-        // self.read_params(port)?;
-        // self.read_controls(port)?;
-        // self.read_link_stats(port)?;
-        // self.read_waypoints(port)?;
-        //
         self.read_params()?;
         self.read_sys_ap_status()?;
         self.read_controls()?;
@@ -392,48 +327,24 @@ impl State {
     }
 
     pub fn send_arm_command(&mut self) -> Result<(), io::Error> {
-        if let Some(port) = self.interface.serial_port.as_mut() {
-            send_payload::<{ 2 }>(MsgType::ArmMotors, &[], port)
-        } else {
-            Err(io::Error::new(
-                io::ErrorKind::NotConnected,
-                "Flight controller not connected",
-            ))
-        }
+        send_cmd::<MsgType>(MsgType::ArmMotors, self.common.get_port()?)
     }
 
     pub fn send_disarm_command(&mut self) -> Result<(), io::Error> {
-        if let Some(port) = self.interface.serial_port.as_mut() {
-            send_payload::<{ 2 }>(MsgType::DisarmMotors, &[], port)
-        } else {
-            Err(io::Error::new(
-                io::ErrorKind::NotConnected,
-                "Flight controller not connected",
-            ))
-        }
+        send_cmd::<MsgType>(MsgType::DisarmMotors, self.common.get_port()?)
     }
 
     // todo: These are incomplete. you need to pass which motor etc.
     pub fn send_start_motor_command(&mut self, motor: RotorPosition) -> Result<(), io::Error> {
-        if let Some(port) = self.interface.serial_port.as_mut() {
-            send_payload::<{ 3 }>(MsgType::StartMotors, &[motor as u8], port)
-        } else {
-            Err(io::Error::new(
-                io::ErrorKind::NotConnected,
-                "Flight controller not connected",
-            ))
-        }
+        send_payload::<MsgType, { 1 }>(
+            MsgType::StartMotors,
+            &[motor as u8],
+            self.common.get_port()?,
+        )
     }
 
     pub fn send_stop_motor_command(&mut self, motor: RotorPosition) -> Result<(), io::Error> {
-        if let Some(port) = self.interface.serial_port.as_mut() {
-            send_payload::<{ 3 }>(MsgType::StopMotors, &[motor as u8], port)
-        } else {
-            Err(io::Error::new(
-                io::ErrorKind::NotConnected,
-                "Flight controller not connected",
-            ))
-        }
+        send_payload::<MsgType, { 1 }>(MsgType::StopMotors, &[motor as u8], self.common.get_port()?)
     }
 
     pub fn send_set_servo_posit_command(
@@ -441,17 +352,10 @@ impl State {
         servo_posit: ServoWingPosition,
         value: f32,
     ) -> Result<(), io::Error> {
-        if let Some(port) = self.interface.serial_port.as_mut() {
-            let v = value.to_be_bytes();
-            let payload = [servo_posit as u8, v[0], v[1], v[2], v[3]];
+        let v = value.to_be_bytes();
+        let payload = [servo_posit as u8, v[0], v[1], v[2], v[3]];
 
-            send_payload::<{ SET_SERVO_POSIT_SIZE + 2 }>(MsgType::SetServoPosit, &payload, port)
-        } else {
-            Err(io::Error::new(
-                io::ErrorKind::NotConnected,
-                "Flight controller not connected",
-            ))
-        }
+        send_payload::<MsgType, { 4 }>(MsgType::SetServoPosit, &payload, self.common.get_port()?)
     }
 
     /// Close the serial port
