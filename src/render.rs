@@ -54,16 +54,12 @@ fn render_handler(state: &mut State, scene: &mut Scene, dt: f32) -> EngineUpdate
         state.common.last_query = now;
 
         if state.common.interface.serial_port.is_none() {
-            println!("No port found; re-opening");
+            // println!("No port found; re-opening");
             state.common.interface = SerialInterface::connect();
-        } else {
-            // println!("Port is open");
         }
 
         match state.read_all() {
             Ok(_) => {
-                println!("Success reading data.");
-
                 scene.entities[0].orientation = convert_quat_coords(state.attitude);
 
                 scene.entities[1].orientation = convert_quat_coords(state.attitude_commanded);
@@ -74,7 +70,8 @@ fn render_handler(state: &mut State, scene: &mut Scene, dt: f32) -> EngineUpdate
                 engine_updates.entities = true;
             }
             Err(e) => {
-                println!("Error reading data: {:?}", e);
+                println!("Error reading data: {:?}; re-connecting", e);
+                state.common.interface = SerialInterface::connect();
             }
         }
     }

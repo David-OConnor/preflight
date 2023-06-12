@@ -16,6 +16,8 @@ use std::{
 
 use pc_interface_shared::{self, send_cmd, send_payload};
 
+use anyleaf_usb::{PAYLOAD_START_I, CRC_LEN};
+
 use lin_alg2::f32::Quaternion;
 use types::*;
 
@@ -118,12 +120,12 @@ impl State {
         send_cmd::<MsgType>(MsgType::ReqParams, port)?;
 
         // Read the params passed by the FC in response.
-        let mut rx_buf = [0; PARAMS_SIZE + 2];
+        let mut rx_buf = [0; PARAMS_SIZE + PAYLOAD_START_I + CRC_LEN];
         port.read_exact(&mut rx_buf)?;
 
         // The order (or equivalently indices) of params here must match the FC firmware. Use it
         // as a reference.
-        let mut i = 1;
+        let mut i = PAYLOAD_START_I;
 
         let attitude_data: [u8; QUATERNION_SIZE] =
             rx_buf[i..QUATERNION_SIZE + i].try_into().unwrap();
@@ -197,8 +199,6 @@ impl State {
         self.current_pwr.aft_right = f32::from_be_bytes(rx_buf[i..i + 4].try_into().unwrap());
         i += 4;
 
-        // check_crc(MsgType::Params, &rx_buf)?;
-
         Ok(())
     }
 
@@ -211,14 +211,12 @@ impl State {
         send_cmd::<MsgType>(MsgType::ReqSysApStatus, port)?;
 
         // todo: Just sys status for now; do AP too.
-        let mut rx_buf = [0; SYS_AP_STATUS_SIZE + 2];
+        let mut rx_buf = [0; SYS_AP_STATUS_SIZE + PAYLOAD_START_I + CRC_LEN];
         port.read_exact(&mut rx_buf)?;
 
         let sys_status: [u8; SYS_AP_STATUS_SIZE] =
-            rx_buf[1..SYS_AP_STATUS_SIZE + 1].try_into().unwrap();
+            rx_buf[PAYLOAD_START_I..SYS_AP_STATUS_SIZE + PAYLOAD_START_I].try_into().unwrap();
         self.system_status = sys_status.into();
-
-        // check_crc(MsgType::SysApStatus, &rx_buf)?;
 
         Ok(())
     }
@@ -230,14 +228,11 @@ impl State {
 
         send_cmd::<MsgType>(MsgType::ReqControls, port)?;
 
-        // let mut rx_buf = [0; CONTROLS_SIZE + 2]; // todo: Bogus leading 1?
-        let mut rx_buf = [0; CONTROLS_SIZE + 2];
+        let mut rx_buf = [0; CONTROLS_SIZE + PAYLOAD_START_I + CRC_LEN];
         port.read_exact(&mut rx_buf)?;
 
-        let controls: [u8; CONTROLS_SIZE] = rx_buf[1..CONTROLS_SIZE + 1].try_into().unwrap();
+        let controls: [u8; CONTROLS_SIZE] = rx_buf[PAYLOAD_START_I..CONTROLS_SIZE + PAYLOAD_START_I].try_into().unwrap();
         self.controls = controls_from_buf(controls);
-
-        // check_crc(MsgType::Controls, &rx_buf)?;
 
         Ok(())
     }
@@ -250,14 +245,12 @@ impl State {
 
         send_cmd::<MsgType>(MsgType::ReqLinkStats, port)?;
 
-        let mut rx_buf = [0; LINK_STATS_SIZE + 2];
+        let mut rx_buf = [0; LINK_STATS_SIZE + PAYLOAD_START_I + CRC_LEN];
         port.read_exact(&mut rx_buf)?;
 
-        let link_stats: [u8; LINK_STATS_SIZE] = rx_buf[1..LINK_STATS_SIZE + 1].try_into().unwrap();
+        let link_stats: [u8; LINK_STATS_SIZE] = rx_buf[PAYLOAD_START_I..LINK_STATS_SIZE + PAYLOAD_START_I].try_into().unwrap();
 
         self.link_stats = link_stats.into();
-
-        // check_crc(MsgType::LinkStats, &rx_buf)?;
 
         Ok(())
     }
@@ -269,17 +262,15 @@ impl State {
 
         send_cmd::<MsgType>(MsgType::ReqWaypoints, port)?;
 
-        let mut rx_buf = [0; WAYPOINTS_SIZE + 2];
+        let mut rx_buf = [0; WAYPOINTS_SIZE+ PAYLOAD_START_I + CRC_LEN];
         port.read_exact(&mut rx_buf)?;
 
         let mut wp_buf = [0; WAYPOINTS_SIZE];
-        wp_buf.clone_from_slice(&rx_buf[1..WAYPOINTS_SIZE + 1]);
+        wp_buf.clone_from_slice(&rx_buf[PAYLOAD_START_I..WAYPOINTS_SIZE + PAYLOAD_START_I]);
 
         let waypoints_data = waypoints_from_buf(wp_buf);
 
         self.waypoints = waypoints_data;
-
-        // check_crc(MsgType::Waypoints, &rx_buf)?;
 
         // todo: Lat, Lon
 
@@ -292,18 +283,16 @@ impl State {
 
         send_cmd::<MsgType>(MsgType::ReqControlMapping, port)?;
 
-        let mut rx_buf = [0; CONTROL_MAPPING_QUAD_SIZE + 2];
+        let mut rx_buf = [0; CONTROL_MAPPING_QUAD_SIZE+ PAYLOAD_START_I + CRC_LEN];
         port.read_exact(&mut rx_buf)?;
 
         let mut buf = [0; CONTROL_MAPPING_QUAD_SIZE];
-        buf.clone_from_slice(&rx_buf[1..CONTROL_MAPPING_QUAD_SIZE + 1]);
+        buf.clone_from_slice(&rx_buf[PAYLOAD_START_I..CONTROL_MAPPING_QUAD_SIZE + PAYLOAD_START_I]);
 
         let control_mapping = buf.into();
 
         // todo: Fixed wing A/R.
         self.control_mapping_quad = control_mapping;
-
-        // check_crc(MsgType::ControlMapping, &rx_buf)?;
 
         Ok(())
     }
@@ -378,7 +367,6 @@ fn quat_from_buf(p: &[u8; QUATERNION_SIZE]) -> Quaternion {
 
 impl From<[u8; SYS_STATUS_SIZE]> for SystemStatus {
     fn from(p: [u8; SYS_STATUS_SIZE]) -> Self {
-        // todo: You could achieve more efficient packing.
         SystemStatus {
             imu: p[0].try_into().unwrap(),
             baro: p[1].try_into().unwrap(),
