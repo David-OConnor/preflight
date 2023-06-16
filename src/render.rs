@@ -13,6 +13,8 @@ use graphics::{
     PointLight, Scene, UiLayout, UiSettings, Vertex,
 };
 
+use obj;
+
 use lin_alg2::{
     self,
     f32::{Quaternion, Vec3},
@@ -35,10 +37,15 @@ const WINDOW_HEIGHT: f32 = 1_000.;
 /// system.
 fn convert_quat_coords(quat_in: Quaternion) -> Quaternion {
     Quaternion {
+        // w: quat_in.w,
+        // x: -quat_in.y,
+        // y: quat_in.z,
+        // z: -quat_in.x,
+        // todo: if you end up with this setup, remove this fn.
         w: quat_in.w,
-        x: -quat_in.y,
-        y: quat_in.z,
-        z: -quat_in.x,
+        x: quat_in.x,
+        y: quat_in.y,
+        z: quat_in.z,
     }
 }
 
@@ -53,6 +60,9 @@ fn render_handler(state: &mut State, scene: &mut Scene, dt: f32) -> EngineUpdate
     if state.common.last_query.elapsed().as_millis() > READ_INTERVAL_MS {
         state.common.last_query = now;
 
+        // todo: COnnect alsways to TS problems; get rid of this.
+        state.common.interface = SerialInterface::connect();
+
         if state.common.interface.serial_port.is_none() {
             // println!("No port found; re-opening");
             state.common.interface = SerialInterface::connect();
@@ -60,6 +70,7 @@ fn render_handler(state: &mut State, scene: &mut Scene, dt: f32) -> EngineUpdate
 
         match state.read_all() {
             Ok(_) => {
+                // println!("Att: {:?}", state.attitude);
                 scene.entities[0].orientation = convert_quat_coords(state.attitude);
 
                 scene.entities[1].orientation = convert_quat_coords(state.attitude_commanded);
@@ -70,7 +81,6 @@ fn render_handler(state: &mut State, scene: &mut Scene, dt: f32) -> EngineUpdate
                 engine_updates.entities = true;
             }
             Err(e) => {
-                println!("Error reading data: {:?}; re-connecting", e);
                 state.common.interface = SerialInterface::connect();
             }
         }
@@ -156,10 +166,50 @@ fn make_aircraft_mesh() -> graphics::Mesh {
 
     let mut indices = Vec::new();
     for face in &faces {
-        indices.append(&mut vec![
-            // face[0], face[1], face[2], face[0], face[2], face[3],
-            face[0], face[1], face[2],
-        ]);
+        indices.append(&mut vec![face[0], face[1], face[2]]);
+    }
+
+    graphics::Mesh {
+        vertices,
+        indices,
+        material: 0,
+    }
+}
+
+fn load_aircraft_mesh() -> graphics::Mesh {
+    let source = include_bytes!("../resources/plane_model.obj");
+    let data = obj::ObjData::load_buf(&source[..]).unwrap();
+
+    let mut vertices = Vec::new();
+    let mut indices = Vec::new();
+
+    for object in data.objects {
+        for group in object.groups {
+            let mut ind = 0;
+            for poly in group.polys {
+                for end_index in 2..poly.0.len() {
+                    for &index in &[0, end_index - 1, end_index] {
+                        let obj::IndexTuple(position_id, _texture_id, normal_id) = poly.0[index];
+
+                        // todo...
+                        indices.push(ind);
+                        ind += 1;
+
+                        // vertices.push(Vertex {
+                        //     pos: data.position[position_id],
+                        //     normal: data.normal[normal_id.unwrap()],
+                        // })
+
+                        let normal = data.normal[normal_id.unwrap()];
+
+                        vertices.push(Vertex::new(
+                            data.position[position_id],
+                            Vec3::new(normal[0], normal[1], normal[2]),
+                        ));
+                    }
+                }
+            }
+        }
     }
 
     graphics::Mesh {
@@ -177,7 +227,7 @@ pub fn run(state: State) {
             0,
             Vec3::new(0., 2., 0.),
             Quaternion::new_identity(),
-            1.,
+            0.5,
             (1., 0., 1.),
             1.,
         ),
@@ -186,14 +236,15 @@ pub fn run(state: State) {
             0,
             Vec3::new(0., -2., 0.),
             Quaternion::new_identity(),
-            1.,
+            0.5,
             (1., 0., 1.),
             1.,
         ),
     ];
 
     // let aircraft_mesh = Mesh::new_box(1., 1., 1.);
-    let aircraft_mesh = make_aircraft_mesh();
+    // let aircraft_mesh = make_aircraft_mesh();
+    let aircraft_mesh = load_aircraft_mesh();
 
     let scene = Scene {
         // todo: Change these meshes A/R.

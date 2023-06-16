@@ -15,3 +15,6 @@ lin-alg2 = { path = "../../lin_alg"}
 num_enum = { version = "^0.5.7", default_features = false }
 
 
+# For loading models
+obj = "0.10.2"
+

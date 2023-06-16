@@ -16,7 +16,7 @@ use std::{
 
 use pc_interface_shared::{self, send_cmd, send_payload};
 
-use anyleaf_usb::{PAYLOAD_START_I, CRC_LEN};
+use anyleaf_usb::{CRC_LEN, PAYLOAD_START_I};
 
 use lin_alg2::f32::Quaternion;
 use types::*;
@@ -31,7 +31,7 @@ mod ui;
 // todo without explicitly requesting here?
 // todo: Also: multiple intervals for different sorts of data, eg update
 // todo attitude at a higher rate than other things.
-const READ_INTERVAL: f32 = 0.1;
+const READ_INTERVAL: f32 = 0.2;
 pub const READ_INTERVAL_MS: u128 = (READ_INTERVAL * 1_000.) as u128;
 
 /// Data passed by the flight controller
@@ -214,8 +214,10 @@ impl State {
         let mut rx_buf = [0; SYS_AP_STATUS_SIZE + PAYLOAD_START_I + CRC_LEN];
         port.read_exact(&mut rx_buf)?;
 
-        let sys_status: [u8; SYS_AP_STATUS_SIZE] =
-            rx_buf[PAYLOAD_START_I..SYS_AP_STATUS_SIZE + PAYLOAD_START_I].try_into().unwrap();
+        let sys_status: [u8; SYS_AP_STATUS_SIZE] = rx_buf
+            [PAYLOAD_START_I..SYS_AP_STATUS_SIZE + PAYLOAD_START_I]
+            .try_into()
+            .unwrap();
         self.system_status = sys_status.into();
 
         Ok(())
@@ -231,7 +233,10 @@ impl State {
         let mut rx_buf = [0; CONTROLS_SIZE + PAYLOAD_START_I + CRC_LEN];
         port.read_exact(&mut rx_buf)?;
 
-        let controls: [u8; CONTROLS_SIZE] = rx_buf[PAYLOAD_START_I..CONTROLS_SIZE + PAYLOAD_START_I].try_into().unwrap();
+        let controls: [u8; CONTROLS_SIZE] = rx_buf
+            [PAYLOAD_START_I..CONTROLS_SIZE + PAYLOAD_START_I]
+            .try_into()
+            .unwrap();
         self.controls = controls_from_buf(controls);
 
         Ok(())
@@ -248,7 +253,10 @@ impl State {
         let mut rx_buf = [0; LINK_STATS_SIZE + PAYLOAD_START_I + CRC_LEN];
         port.read_exact(&mut rx_buf)?;
 
-        let link_stats: [u8; LINK_STATS_SIZE] = rx_buf[PAYLOAD_START_I..LINK_STATS_SIZE + PAYLOAD_START_I].try_into().unwrap();
+        let link_stats: [u8; LINK_STATS_SIZE] = rx_buf
+            [PAYLOAD_START_I..LINK_STATS_SIZE + PAYLOAD_START_I]
+            .try_into()
+            .unwrap();
 
         self.link_stats = link_stats.into();
 
@@ -262,7 +270,7 @@ impl State {
 
         send_cmd::<MsgType>(MsgType::ReqWaypoints, port)?;
 
-        let mut rx_buf = [0; WAYPOINTS_SIZE+ PAYLOAD_START_I + CRC_LEN];
+        let mut rx_buf = [0; WAYPOINTS_SIZE + PAYLOAD_START_I + CRC_LEN];
         port.read_exact(&mut rx_buf)?;
 
         let mut wp_buf = [0; WAYPOINTS_SIZE];
@@ -283,7 +291,7 @@ impl State {
 
         send_cmd::<MsgType>(MsgType::ReqControlMapping, port)?;
 
-        let mut rx_buf = [0; CONTROL_MAPPING_QUAD_SIZE+ PAYLOAD_START_I + CRC_LEN];
+        let mut rx_buf = [0; CONTROL_MAPPING_QUAD_SIZE + PAYLOAD_START_I + CRC_LEN];
         port.read_exact(&mut rx_buf)?;
 
         let mut buf = [0; CONTROL_MAPPING_QUAD_SIZE];
@@ -368,15 +376,16 @@ fn quat_from_buf(p: &[u8; QUATERNION_SIZE]) -> Quaternion {
 impl From<[u8; SYS_STATUS_SIZE]> for SystemStatus {
     fn from(p: [u8; SYS_STATUS_SIZE]) -> Self {
         SystemStatus {
-            imu: p[0].try_into().unwrap(),
-            baro: p[1].try_into().unwrap(),
-            gps: p[2].try_into().unwrap(),
-            tof: p[3].try_into().unwrap(),
-            magnetometer: p[4].try_into().unwrap(),
-            esc_telemetry: p[5].try_into().unwrap(),
-            esc_rpm: p[6].try_into().unwrap(),
-            rf_control_link: p[7].try_into().unwrap(),
-            flash_spi: p[8].try_into().unwrap(),
+            // todo: Getting some errors here.
+            imu: p[0].try_into().unwrap_or_default(),
+            baro: p[1].try_into().unwrap_or_default(),
+            gps: p[2].try_into().unwrap_or_default(),
+            tof: p[3].try_into().unwrap_or_default(),
+            magnetometer: p[4].try_into().unwrap_or_default(),
+            esc_telemetry: p[5].try_into().unwrap_or_default(),
+            esc_rpm: p[6].try_into().unwrap_or_default(),
+            rf_control_link: p[7].try_into().unwrap_or_default(),
+            flash_spi: p[8].try_into().unwrap_or_default(),
             rf_control_fault: p[9] != 0,
             esc_rpm_fault: p[10] != 0,
         }

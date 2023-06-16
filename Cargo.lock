@@ -719,6 +719,7 @@ dependencies = [
  "graphics",
  "lin-alg2",
  "num_enum 0.5.7",
+ "obj",
  "pc_interface_shared",
 ]
 
