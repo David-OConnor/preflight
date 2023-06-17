@@ -31,7 +31,7 @@ mod ui;
 // todo without explicitly requesting here?
 // todo: Also: multiple intervals for different sorts of data, eg update
 // todo attitude at a higher rate than other things.
-const READ_INTERVAL: f32 = 0.2;
+const READ_INTERVAL: f32 = 0.05;
 pub const READ_INTERVAL_MS: u128 = (READ_INTERVAL * 1_000.) as u128;
 
 /// Data passed by the flight controller

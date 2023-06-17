@@ -251,7 +251,7 @@ pub fn run(state: State) {
             point_lights: vec![
                 PointLight {
                     type_: LightType::Omnidirectional,
-                    position: Vec3::new(0., 20., -5.),
+                    position: Vec3::new(0., 10., -5.),
                     diffuse_color: [1., 1., 1., 1.],
                     specular_color: [1., 1., 1., 1.],
                     diffuse_intensity: 200.,
@@ -259,7 +259,7 @@ pub fn run(state: State) {
                 },
                 PointLight {
                     type_: LightType::Omnidirectional,
-                    position: Vec3::new(0., -20., -5.),
+                    position: Vec3::new(0., -14., -5.),
                     diffuse_color: [1., 1., 1., 1.],
                     specular_color: [1., 1., 1., 1.],
                     diffuse_intensity: 200.,
@@ -272,7 +272,7 @@ pub fn run(state: State) {
         window_title: WINDOW_TITLE.to_owned(),
         camera: Camera {
             position: Vec3::new(0., 0., -10.),
-            fov_y: TAU / 8.,
+            fov_y: TAU / 10.,
             ..Default::default()
         },
     };
