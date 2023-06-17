@@ -34,18 +34,13 @@ const WINDOW_WIDTH: f32 = 1_400.;
 const WINDOW_HEIGHT: f32 = 1_000.;
 
 /// Convert from the coordinate system we use on the aircraft, to the one used by the rendering
-/// system.
+/// system. This reverseds Y and Z.
 fn convert_quat_coords(quat_in: Quaternion) -> Quaternion {
     Quaternion {
-        // w: quat_in.w,
-        // x: -quat_in.y,
-        // y: quat_in.z,
-        // z: -quat_in.x,
-        // todo: if you end up with this setup, remove this fn.
         w: quat_in.w,
         x: quat_in.x,
-        y: quat_in.y,
-        z: quat_in.z,
+        y: quat_in.z,
+        z: quat_in.y,
     }
 }
 
