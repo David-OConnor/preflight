@@ -1,5 +1,6 @@
 //! This module contains code related to the 3D render (Aircraft attitude depiction etc)
 
+use egui::plot::MarkerShape::Up;
 use std::{
     boxed::Box,
     f32::consts::TAU,
@@ -36,6 +37,10 @@ const WINDOW_HEIGHT: f32 = 1_000.;
 /// Convert from the coordinate system we use on the aircraft, to the one used by the rendering
 /// system. This reverseds Y and Z.
 fn convert_quat_coords(quat_in: Quaternion) -> Quaternion {
+    // Rotate the model appropriately based on which way it points.
+    let model_compensation = Quaternion::from_axis_angle(Vec3::new(0., 0., 1.), TAU / 4.);
+    let quat_in = model_compensation * quat_in;
+
     Quaternion {
         w: quat_in.w,
         x: quat_in.x,
@@ -178,9 +183,9 @@ fn load_aircraft_mesh() -> graphics::Mesh {
     let mut vertices = Vec::new();
     let mut indices = Vec::new();
 
+    let mut ind = 0;
     for object in data.objects {
         for group in object.groups {
-            let mut ind = 0;
             for poly in group.polys {
                 for end_index in 2..poly.0.len() {
                     for &index in &[0, end_index - 1, end_index] {
@@ -220,18 +225,18 @@ pub fn run(state: State) {
         // Aircraft estimated attitude
         Entity::new(
             0,
-            Vec3::new(0., 2., 0.),
+            Vec3::new(0., 0., 0.),
             Quaternion::new_identity(),
-            0.5,
+            0.0007,
             (1., 0., 1.),
             1.,
         ),
         // Commanded attitutde
         Entity::new(
             0,
-            Vec3::new(0., -2., 0.),
+            Vec3::new(0., -3., 0.),
             Quaternion::new_identity(),
-            0.5,
+            0.0002,
             (1., 0., 1.),
             1.,
         ),
@@ -251,7 +256,7 @@ pub fn run(state: State) {
             point_lights: vec![
                 PointLight {
                     type_: LightType::Omnidirectional,
-                    position: Vec3::new(0., 10., -5.),
+                    position: Vec3::new(0., 14., -5.),
                     diffuse_color: [1., 1., 1., 1.],
                     specular_color: [1., 1., 1., 1.],
                     diffuse_intensity: 200.,

@@ -16,7 +16,7 @@ use crate::{
         AircraftType, AltType, ArmStatus, LinkStats, MotorPower, MotorRpms, MsgType, SensorStatus,
         YawAssist,
     },
-    BattCellCount, RotorPosition, State,
+    BattCellCount, ChannelData, RotorPosition, State,
 };
 
 // pub const UI_PANEL_SIZE: f32 = 1_600.;
@@ -216,8 +216,13 @@ fn add_control_disp(mut val: f32, text: &str, throttle: bool, ui: &mut Ui) {
     ui.add(bar);
 }
 
-fn add_link_stats(link_stats: &LinkStats, ui: &mut Ui) {
+fn add_link_stats(status: SensorStatus, link_stats: &LinkStats, ui: &mut Ui) {
     // todo: convert things like tx power to actual power disp
+    if status != SensorStatus::Pass {
+        ui.heading(RichText::new("(Radio control link not connected)").color(Color32::GOLD));
+        return;
+    }
+
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
             // todo: (130+RSSI_dBm)/130*100?
@@ -283,6 +288,35 @@ fn add_link_stats(link_stats: &LinkStats, ui: &mut Ui) {
             ui.label("Downlink SNR");
             ui.label(&link_stats.downlink_snr.to_string());
         });
+    });
+}
+
+fn add_control_data(status: SensorStatus, ch_data: &Option<ChannelData>, ui: &mut Ui) {
+    ui.vertical(|ui| {
+        ui.heading("Control commands");
+
+        if status == SensorStatus::Pass && ch_data.is_some() {
+            let controls = ch_data.as_ref().unwrap();
+
+            ui.horizontal(|ui| {
+                add_control_disp(controls.pitch, "Pitch", true, ui);
+                add_control_disp(controls.roll, "Roll", true, ui);
+            });
+            ui.horizontal(|ui| {
+                add_control_disp(controls.yaw, "Yaw", true, ui);
+                add_control_disp(controls.throttle, "Throttle", false, ui);
+            });
+
+            // todo Important: This isn't the actual arm status state! It's the control input!
+            // todo: Potentially misleading.
+            ui.vertical(|ui| {
+                ui.label("Motor arm switch");
+                let val = controls.arm_status;
+                ui.label(RichText::new(val.as_str()).color(val.as_color()));
+            });
+        } else {
+            ui.heading(RichText::new("(Radio control link not connected)").color(Color32::GOLD));
+        }
     });
 }
 
@@ -663,36 +697,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
             ui.add_space(SPACE_BETWEEN_SECTIONS);
 
-            ui.vertical(|ui| {
-                ui.heading("Control commands");
-
-                if state.system_status.rf_control_link == SensorStatus::Pass
-                    && state.controls.is_some()
-                {
-                    let controls = state.controls.as_ref().unwrap();
-
-                    ui.horizontal(|ui| {
-                        add_control_disp(controls.pitch, "Pitch", true, ui);
-                        add_control_disp(controls.roll, "Roll", true, ui);
-                    });
-                    ui.horizontal(|ui| {
-                        add_control_disp(controls.yaw, "Yaw", true, ui);
-                        add_control_disp(controls.throttle, "Throttle", false, ui);
-                    });
-
-                    // todo Important: This isn't the actual arm status state! It's the control input!
-                    // todo: Potentially misleading.
-                    ui.vertical(|ui| {
-                        ui.label("Motor arm switch");
-                        let val = controls.arm_status;
-                        ui.label(RichText::new(val.as_str()).color(val.as_color()));
-                    });
-                } else {
-                    ui.heading(
-                        RichText::new("(Radio control link not connected)").color(Color32::GOLD),
-                    );
-                }
-            });
+            add_control_data(state.system_status.rf_control_link, &state.controls, ui);
         });
 
         // todo: Input mode switch etc.
@@ -703,11 +708,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
         // todo: Evaluate which of these you want.
         // todo: RSSI 2, antenna etc A/R only if full diversity
 
-        if state.system_status.rf_control_link == SensorStatus::Pass {
-            add_link_stats(&state.link_stats, ui);
-        } else {
-            ui.heading(RichText::new("(Radio control link not connected)").color(Color32::GOLD));
-        }
+        add_link_stats(state.system_status.rf_control_link, &state.link_stats, ui);
 
         ui.add_space(SPACE_BETWEEN_SECTIONS);
 
