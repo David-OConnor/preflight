@@ -16,7 +16,7 @@ use std::{
 
 use pc_interface_shared::{self, send_cmd, send_payload};
 
-use anyleaf_usb::{CRC_LEN, PAYLOAD_START_I};
+use anyleaf_usb::{CRC_LEN, PAYLOAD_START_I, bytes_to_float};
 
 use lin_alg2::f32::Quaternion;
 use types::*;
@@ -489,11 +489,6 @@ struct SetServoPositionData {
 
 // pub enum SerialError {};
 
-/// Convert bytes to a float
-pub fn bytes_to_float(bytes: &[u8]) -> f32 {
-    let bytes: [u8; 4] = bytes.try_into().unwrap();
-    f32::from_bits(u32::from_be_bytes(bytes))
-}
 
 fn main() {
     let mut state = State::default();

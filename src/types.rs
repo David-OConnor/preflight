@@ -298,6 +298,7 @@ pub struct SystemStatus {
     pub esc_rpm_fault: bool,
 }
 
+
 #[derive(Clone, Copy, PartialEq)]
 pub enum AltType {
     /// Above ground level (eg from a TOF sensor)

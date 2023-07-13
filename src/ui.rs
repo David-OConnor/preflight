@@ -14,7 +14,7 @@ use pc_interface_shared::{send_cmd, ConnectionStatus};
 use crate::{
     types::{
         AircraftType, AltType, ArmStatus, LinkStats, MotorPower, MotorRpms, MsgType, SensorStatus,
-        YawAssist,
+        YawAssist, SystemStatus,
     },
     BattCellCount, ChannelData, RotorPosition, State,
 };
@@ -129,7 +129,7 @@ fn tx_pwr_from_val(val: u8) -> String {
         7 => "250mW",
         _ => "(Unknown)",
     }
-    .to_owned()
+        .to_owned()
 }
 
 enum LatLon {
@@ -338,7 +338,7 @@ fn add_motor_commands(ui: &mut Ui, power: &mut MotorPower, rpms: &mut MotorRpms)
         (&mut power.aft_left, "Aft left power"),
         (&mut power.aft_right, "Aft right power"),
     ]
-    .into_iter()
+        .into_iter()
     {
         ui.add(
             // Offsets are to avoid gimball lock.
@@ -349,7 +349,7 @@ fn add_motor_commands(ui: &mut Ui, power: &mut MotorPower, rpms: &mut MotorRpms)
 
                 *motor_pwr as f64
             })
-            .text(label),
+                .text(label),
         );
     }
 }
@@ -474,6 +474,48 @@ fn batt_charge_to_color(charge: f32) -> Color32 {
     Color32::from_rgb(r, g, b)
 }
 
+fn add_system_status(ui: &mut Ui, system_status: &SystemStatus) {
+    ui.heading("System status"); // todo: Get this from FC; update on both sides.
+
+    ui.horizontal(|ui| {
+        add_sensor_status("IMU: ", system_status.imu, ui, true);
+        add_sensor_status(
+            "RF control link: ",
+            system_status.rf_control_link,
+            ui,
+            true,
+        );
+        add_sensor_status("RPM readings: ", system_status.esc_rpm, ui, true);
+        add_sensor_status("Baro altimeter: ", system_status.baro, ui, false);
+        add_sensor_status("AGL altimeter: ", system_status.tof, ui, false);
+        add_sensor_status("GNSS (ie GPS): ", system_status.gps, ui, false);
+        add_sensor_status(
+            "Magnetometer: ",
+            system_status.magnetometer,
+            ui,
+            false,
+        );
+        add_sensor_status("SPI flash: ", system_status.flash_spi, ui, false);
+        // add_sensor_status("ESC telemetry: ", system_status.esc_telemetry, ui);
+
+        // todo: Probably a separate row for faults?
+        // todo:  Helper as above for bit statuses.
+        // let val = system_status.rf_control_fault;
+        // ui.vertical(|ui| {
+        //     ui.label("RF faults: ");
+        //     ui.label(RichText::new(val.to_string()).color(test_val_to_color(val)));
+        // });
+        // ui.add_space(SPACING_HORIZONTAL);
+        //
+        // let val = system_status.esc_rpm_fault;
+        // ui.vertical(|ui| {
+        //     ui.label("RPM faults: ");
+        //     ui.label(RichText::new(val.to_string()).color(test_val_to_color(val)));
+        // });
+        // ui.add_space(SPACING_HORIZONTAL);
+    });
+}
+
 pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineUpdates {
     // pub fn run() -> impl FnMut(&egui::Context) {
     //     move |state: &mut State, ctx: &egui::Context| {
@@ -548,45 +590,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
         ui.heading(format!("Aircraft type: {}", aircraft_type));
 
-        ui.heading("System status"); // todo: Get this from FC; update on both sides.
-
-        ui.horizontal(|ui| {
-            add_sensor_status("IMU: ", state.system_status.imu, ui, true);
-            add_sensor_status(
-                "RF control link: ",
-                state.system_status.rf_control_link,
-                ui,
-                true,
-            );
-            add_sensor_status("RPM readings: ", state.system_status.esc_rpm, ui, true);
-            add_sensor_status("Baro altimeter: ", state.system_status.baro, ui, false);
-            add_sensor_status("AGL altimeter: ", state.system_status.tof, ui, false);
-            add_sensor_status("GNSS (ie GPS): ", state.system_status.gps, ui, false);
-            add_sensor_status(
-                "Magnetometer: ",
-                state.system_status.magnetometer,
-                ui,
-                false,
-            );
-            add_sensor_status("SPI flash: ", state.system_status.flash_spi, ui, false);
-            // add_sensor_status("ESC telemetry: ", state.system_status.esc_telemetry, ui);
-
-            // todo: Probably a separate row for faults?
-            // todo:  Helper as above for bit statuses.
-            // let val = state.system_status.rf_control_fault;
-            // ui.vertical(|ui| {
-            //     ui.label("RF faults: ");
-            //     ui.label(RichText::new(val.to_string()).color(test_val_to_color(val)));
-            // });
-            // ui.add_space(SPACING_HORIZONTAL);
-            //
-            // let val = state.system_status.esc_rpm_fault;
-            // ui.vertical(|ui| {
-            //     ui.label("RPM faults: ");
-            //     ui.label(RichText::new(val.to_string()).color(test_val_to_color(val)));
-            // });
-            // ui.add_space(SPACING_HORIZONTAL);
-        });
+        add_system_status(ui, &state.system_status);
 
         ui.add_space(SPACE_BETWEEN_SECTIONS);
 
@@ -806,7 +810,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                                 Button::new(
                                     RichText::new("Change motor mapping").color(Color32::BLACK),
                                 )
-                                .fill(Color32::from_rgb(220, 120, 10)),
+                                    .fill(Color32::from_rgb(220, 120, 10)),
                             )
                             .clicked()
                         {
@@ -841,7 +845,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                                         3,
                                     ),
                                 ]
-                                .into_iter()
+                                    .into_iter()
                                 {
                                     // todo: For now, only set up for quad
                                     ui.vertical(|ui| {
@@ -884,7 +888,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                                         state.control_mapping_quad.m4_reversed,
                                     ),
                                 ]
-                                .into_iter()
+                                    .into_iter()
                                 {
                                     ui.vertical(|ui| {
                                         ui.label(label);
