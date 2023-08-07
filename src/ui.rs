@@ -33,7 +33,7 @@ const BATT_LIFE_WIDTH: f32 = 200.; // eg pitch, roll, yaw, throttle control.
 const MOTOR_MAPPING_DROPDOWN_WIDTH: f32 = 90.;
 const MIN_UI_WIDTH: f32 = 800.;
 const SLIDER_WIDTH: f32 = 200.;
-const FLOAT_EDIT_WIDTH: f32 = 46.;
+const FLOAT_EDIT_WIDTH: f32 = 60.;
 
 // todo: PUt this elsewhere
 pub const PAYLOAD_SIZE_CONFIG: usize = crate::CONFIG_SIZE + PAYLOAD_START_I + CRC_LEN;
@@ -174,12 +174,21 @@ fn rad_to_dms(rad: f32, lat_lon: LatLon) -> String {
     format!("{deg_whole}° {mins_whole}' {:.2}\" {n_s}", secs)
 }
 
-fn text_edit_float(val: &mut f32, _default: f64, ui: &mut Ui) {
+// fn text_edit_float(val: &mut f32, _default: f64, ui: &mut Ui) {
+//     let mut entry = val.to_string();
+//
+//     let response = ui.add(egui::TextEdit::singleline(&mut entry).desired_width(FLOAT_EDIT_WIDTH));
+//     if response.changed() {
+//         *val = entry.parse::<f32>().unwrap_or(0.001);
+//     }
+// }
+
+fn text_edit_int(val: &mut u32, ui: &mut Ui) {
     let mut entry = val.to_string();
 
     let response = ui.add(egui::TextEdit::singleline(&mut entry).desired_width(FLOAT_EDIT_WIDTH));
     if response.changed() {
-        *val = entry.parse::<f32>().unwrap_or(0.);
+        *val = entry.parse::<u32>().unwrap_or(0);
     }
 }
 
@@ -959,6 +968,8 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
             }
         }
 
+        ui.add_space(SPACE_BETWEEN_SECTIONS);
+
         ui.heading("PID Coefficients");
 
         ui.horizontal(|ui| match &mut state.config_ui {
@@ -970,13 +981,28 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                 let d_label =
                     &("D: ".to_owned() + &state.config_on_device.pid_coeffs.d.to_string());
 
+                const FACTOR: f32 = 100_000.;
+                // todo tmep to deal with poor float handling
+
+                let mut p_int = (config_ui.pid_coeffs.p * FACTOR) as u32;
+                let mut i_int = (config_ui.pid_coeffs.i * FACTOR) as u32;
+                let mut d_int = (config_ui.pid_coeffs.d * FACTOR) as u32;
+
                 ui.label(p_label);
-                text_edit_float(&mut config_ui.pid_coeffs.p, 0., ui);
+                // text_edit_float(&mut config_ui.pid_coeffs.p, 0., ui);
+                text_edit_int(&mut p_int, ui);
+
                 ui.label(i_label);
-                text_edit_float(&mut config_ui.pid_coeffs.i, 0., ui);
+                // text_edit_float(&mut config_ui.pid_coeffs.i, 0., ui);
+                text_edit_int(&mut i_int, ui);
 
                 ui.label(d_label);
-                text_edit_float(&mut config_ui.pid_coeffs.d, 0., ui);
+                // text_edit_float(&mut config_ui.pid_coeffs.d, 0., ui);
+                text_edit_int(&mut d_int, ui);
+
+                config_ui.pid_coeffs.p = (p_int as f32) / FACTOR;
+                config_ui.pid_coeffs.i = (i_int as f32) / FACTOR;
+                config_ui.pid_coeffs.d = (d_int as f32) / FACTOR;
 
                 ui.add_space(SPACE_BETWEEN_SECTIONS);
 
@@ -987,7 +1013,6 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                     )
                     .clicked()
                 {
-
                     if send_payload::<MsgType, PAYLOAD_SIZE_CONFIG>(
                         MsgType::SaveConfig,
                         &config_ui.to_bytes(),
