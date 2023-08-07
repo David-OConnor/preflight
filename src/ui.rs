@@ -351,6 +351,7 @@ fn add_not_connected_page(ui: &mut Ui) {
 }
 
 fn add_motor_commands(ui: &mut Ui, power: &mut MotorPower, rpms: &mut MotorRpms) {
+    return;
     ui.heading(
         "Send commands to motors. ⚠️Warning: Causes motors to spin. Disconnect all \
                 propellers before using.⚠️",
