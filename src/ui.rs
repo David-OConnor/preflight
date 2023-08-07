@@ -755,168 +755,170 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
             });
         });
 
-        ui.add_space(SPACE_BETWEEN_SECTIONS);
-
-        ui.heading("Motor power settings and RPM");
-
-        // todo: Color-code power and perhaps RPM.
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.label("Motor 1 power");
-                ui.label(format!("{:.3}", &state.current_pwr.front_left));
-            });
-            ui.add_space(SPACING_HORIZONTAL);
-
-            ui.vertical(|ui| {
-                ui.label("Motor 2 power");
-                ui.label(format!("{:.3}", &state.current_pwr.front_right));
-            });
-            ui.add_space(SPACING_HORIZONTAL);
-
-            ui.vertical(|ui| {
-                ui.label("Motor 3 power");
-                ui.label(format!("{:.3}", &state.current_pwr.aft_left));
-            });
-            ui.add_space(SPACING_HORIZONTAL);
-
-            ui.vertical(|ui| {
-                ui.label("Motor 4 Rpower");
-                ui.label(format!("{:.3}", &state.current_pwr.aft_right));
-            });
-        });
-
-        // todo: Motors 1-4 vs positions?
-
-        ui.add_space(SPACE_BETWEEN_SECTIONS);
-
-        match state.aircraft_type {
-            AircraftType::Quadcopter => {
-                ui.horizontal(|ui| {
-                    ui.horizontal(|ui| {
-                        ui.vertical(|ui| {
-                            ui.label("Motor 1 RPM");
-                            ui.label(&format_rpm(state.rpm_readings.front_left));
-                        });
-                        ui.add_space(SPACING_HORIZONTAL);
-
-                        ui.vertical(|ui| {
-                            ui.label("Motor 2 RPM");
-                            ui.label(&format_rpm(state.rpm_readings.front_right));
-                        });
-                        ui.add_space(SPACING_HORIZONTAL);
-
-                        ui.vertical(|ui| {
-                            ui.label("Motor 3 RPM");
-                            ui.label(&format_rpm(state.rpm_readings.aft_left));
-                        });
-                        ui.add_space(SPACING_HORIZONTAL);
-
-                        ui.vertical(|ui| {
-                            ui.label("Motor 4 RPM");
-                            ui.label(&format_rpm(state.rpm_readings.aft_right));
-                        });
-                    });
-
-                    ui.vertical(|ui| {
-                        ui.heading("Motor mapping");
-
-                        // todo: Warning color
-                        if ui
-                            .add(
-                                Button::new(
-                                    RichText::new("Change motor mapping").color(Color32::BLACK),
-                                )
-                                .fill(Color32::from_rgb(220, 120, 10)),
-                            )
-                            .clicked()
-                        {
-                            state.editing_motor_mapping = !state.editing_motor_mapping;
-                        };
-
-                        if state.editing_motor_mapping {
-                            ui.horizontal(|ui| {
-                                for (label, value, reversed, id) in [
-                                    (
-                                        "Motor 1",
-                                        state.control_mapping_quad.m1,
-                                        &mut state.control_mapping_quad.m1_reversed,
-                                        0,
-                                    ),
-                                    (
-                                        "Motor 2",
-                                        state.control_mapping_quad.m2,
-                                        &mut state.control_mapping_quad.m2_reversed,
-                                        1,
-                                    ),
-                                    (
-                                        "Motor 3",
-                                        state.control_mapping_quad.m3,
-                                        &mut state.control_mapping_quad.m3_reversed,
-                                        2,
-                                    ),
-                                    (
-                                        "Motor 4",
-                                        state.control_mapping_quad.m4,
-                                        &mut state.control_mapping_quad.m4_reversed,
-                                        3,
-                                    ),
-                                ]
-                                .into_iter()
-                                {
-                                    // todo: For now, only set up for quad
-                                    ui.vertical(|ui| {
-                                        ui.label(label);
-                                        ui.label(value.as_str());
-
-                                        let mut selected = reversed;
-                                        ComboBox::from_id_source(id)
-                                            .width(MOTOR_MAPPING_DROPDOWN_WIDTH)
-                                            .selected_text(motor_dir_format(*selected))
-                                            .show_ui(ui, |ui| {
-                                                ui.selectable_value(selected, false, "Normal");
-                                                ui.selectable_value(selected, true, "Reversed");
-                                            });
-                                    });
-                                    ui.add_space(SPACING_HORIZONTAL);
-                                }
-                            });
-                        } else {
-                            ui.horizontal(|ui| {
-                                for (label, value, reversed) in [
-                                    (
-                                        "Motor 1",
-                                        state.control_mapping_quad.m1,
-                                        state.control_mapping_quad.m1_reversed,
-                                    ),
-                                    (
-                                        "Motor 2",
-                                        state.control_mapping_quad.m2,
-                                        state.control_mapping_quad.m2_reversed,
-                                    ),
-                                    (
-                                        "Motor 3",
-                                        state.control_mapping_quad.m3,
-                                        state.control_mapping_quad.m3_reversed,
-                                    ),
-                                    (
-                                        "Motor 4",
-                                        state.control_mapping_quad.m4,
-                                        state.control_mapping_quad.m4_reversed,
-                                    ),
-                                ]
-                                .into_iter()
-                                {
-                                    ui.vertical(|ui| {
-                                        ui.label(label);
-                                        ui.label(value.as_str());
-                                        ui.label(motor_dir_format(reversed));
-                                    });
-                                    ui.add_space(SPACING_HORIZONTAL);
-                                }
-                            });
-                        }
-                    });
-                });
+        // todo: PUt back
+        //
+        // ui.add_space(SPACE_BETWEEN_SECTIONS);
+        //
+        // ui.heading("Motor power settings and RPM");
+        //
+        // // todo: Color-code power and perhaps RPM.
+        // ui.horizontal(|ui| {
+        //     ui.vertical(|ui| {
+        //         ui.label("Motor 1 power");
+        //         ui.label(format!("{:.3}", &state.current_pwr.front_left));
+        //     });
+        //     ui.add_space(SPACING_HORIZONTAL);
+        //
+        //     ui.vertical(|ui| {
+        //         ui.label("Motor 2 power");
+        //         ui.label(format!("{:.3}", &state.current_pwr.front_right));
+        //     });
+        //     ui.add_space(SPACING_HORIZONTAL);
+        //
+        //     ui.vertical(|ui| {
+        //         ui.label("Motor 3 power");
+        //         ui.label(format!("{:.3}", &state.current_pwr.aft_left));
+        //     });
+        //     ui.add_space(SPACING_HORIZONTAL);
+        //
+        //     ui.vertical(|ui| {
+        //         ui.label("Motor 4 Rpower");
+        //         ui.label(format!("{:.3}", &state.current_pwr.aft_right));
+        //     });
+        // });
+        //
+        // // todo: Motors 1-4 vs positions?
+        //
+        // ui.add_space(SPACE_BETWEEN_SECTIONS);
+        //
+        // match state.aircraft_type {
+        //     AircraftType::Quadcopter => {
+        //         ui.horizontal(|ui| {
+        //             ui.horizontal(|ui| {
+        //                 ui.vertical(|ui| {
+        //                     ui.label("Motor 1 RPM");
+        //                     ui.label(&format_rpm(state.rpm_readings.front_left));
+        //                 });
+        //                 ui.add_space(SPACING_HORIZONTAL);
+        //
+        //                 ui.vertical(|ui| {
+        //                     ui.label("Motor 2 RPM");
+        //                     ui.label(&format_rpm(state.rpm_readings.front_right));
+        //                 });
+        //                 ui.add_space(SPACING_HORIZONTAL);
+        //
+        //                 ui.vertical(|ui| {
+        //                     ui.label("Motor 3 RPM");
+        //                     ui.label(&format_rpm(state.rpm_readings.aft_left));
+        //                 });
+        //                 ui.add_space(SPACING_HORIZONTAL);
+        //
+        //                 ui.vertical(|ui| {
+        //                     ui.label("Motor 4 RPM");
+        //                     ui.label(&format_rpm(state.rpm_readings.aft_right));
+        //                 });
+        //             });
+        //
+        //             ui.vertical(|ui| {
+        //                 ui.heading("Motor mapping");
+        //
+        //                 // todo: Warning color
+        //                 if ui
+        //                     .add(
+        //                         Button::new(
+        //                             RichText::new("Change motor mapping").color(Color32::BLACK),
+        //                         )
+        //                         .fill(Color32::from_rgb(220, 120, 10)),
+        //                     )
+        //                     .clicked()
+        //                 {
+        //                     state.editing_motor_mapping = !state.editing_motor_mapping;
+        //                 };
+        //
+        //                 if state.editing_motor_mapping {
+        //                     ui.horizontal(|ui| {
+        //                         for (label, value, reversed, id) in [
+        //                             (
+        //                                 "Motor 1",
+        //                                 state.control_mapping_quad.m1,
+        //                                 &mut state.control_mapping_quad.m1_reversed,
+        //                                 0,
+        //                             ),
+        //                             (
+        //                                 "Motor 2",
+        //                                 state.control_mapping_quad.m2,
+        //                                 &mut state.control_mapping_quad.m2_reversed,
+        //                                 1,
+        //                             ),
+        //                             (
+        //                                 "Motor 3",
+        //                                 state.control_mapping_quad.m3,
+        //                                 &mut state.control_mapping_quad.m3_reversed,
+        //                                 2,
+        //                             ),
+        //                             (
+        //                                 "Motor 4",
+        //                                 state.control_mapping_quad.m4,
+        //                                 &mut state.control_mapping_quad.m4_reversed,
+        //                                 3,
+        //                             ),
+        //                         ]
+        //                         .into_iter()
+        //                         {
+        //                             // todo: For now, only set up for quad
+        //                             ui.vertical(|ui| {
+        //                                 ui.label(label);
+        //                                 ui.label(value.as_str());
+        //
+        //                                 let mut selected = reversed;
+        //                                 ComboBox::from_id_source(id)
+        //                                     .width(MOTOR_MAPPING_DROPDOWN_WIDTH)
+        //                                     .selected_text(motor_dir_format(*selected))
+        //                                     .show_ui(ui, |ui| {
+        //                                         ui.selectable_value(selected, false, "Normal");
+        //                                         ui.selectable_value(selected, true, "Reversed");
+        //                                     });
+        //                             });
+        //                             ui.add_space(SPACING_HORIZONTAL);
+        //                         }
+        //                     });
+        //                 } else {
+        //                     ui.horizontal(|ui| {
+        //                         for (label, value, reversed) in [
+        //                             (
+        //                                 "Motor 1",
+        //                                 state.control_mapping_quad.m1,
+        //                                 state.control_mapping_quad.m1_reversed,
+        //                             ),
+        //                             (
+        //                                 "Motor 2",
+        //                                 state.control_mapping_quad.m2,
+        //                                 state.control_mapping_quad.m2_reversed,
+        //                             ),
+        //                             (
+        //                                 "Motor 3",
+        //                                 state.control_mapping_quad.m3,
+        //                                 state.control_mapping_quad.m3_reversed,
+        //                             ),
+        //                             (
+        //                                 "Motor 4",
+        //                                 state.control_mapping_quad.m4,
+        //                                 state.control_mapping_quad.m4_reversed,
+        //                             ),
+        //                         ]
+        //                         .into_iter()
+        //                         {
+        //                             ui.vertical(|ui| {
+        //                                 ui.label(label);
+        //                                 ui.label(value.as_str());
+        //                                 ui.label(motor_dir_format(reversed));
+        //                             });
+        //                             ui.add_space(SPACING_HORIZONTAL);
+        //                         }
+        //                     });
+        //                 }
+        //             });
+        //         });
 
                 ui.add_space(SPACE_BETWEEN_SECTIONS);
 
