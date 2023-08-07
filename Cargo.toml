@@ -12,7 +12,7 @@ anyleaf_usb = { path = "../anyleaf_usb" }
 
 lin-alg2 = { path = "../../lin_alg"}
 # To parse enums from their integer repr
-num_enum = { version = "^0.5.7", default_features = false }
+num_enum = { version = "^0.6.1", default_features = false }
 
 
 # For loading models

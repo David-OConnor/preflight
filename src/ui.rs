@@ -9,12 +9,14 @@ use egui::{
 
 use graphics::{EngineUpdates, Scene};
 
-use pc_interface_shared::{send_cmd, ConnectionStatus};
+use pc_interface_shared::{send_cmd, send_payload, ConnectionStatus};
+
+use anyleaf_usb::{CRC_LEN, PAYLOAD_START_I};
 
 use crate::{
     types::{
         AircraftType, AltType, ArmStatus, LinkStats, MotorPower, MotorRpms, MsgType, SensorStatus,
-        YawAssist, SystemStatus,
+        SystemStatus, YawAssist, CONFIG_SIZE,
     },
     BattCellCount, ChannelData, RotorPosition, State,
 };
@@ -31,6 +33,10 @@ const BATT_LIFE_WIDTH: f32 = 200.; // eg pitch, roll, yaw, throttle control.
 const MOTOR_MAPPING_DROPDOWN_WIDTH: f32 = 90.;
 const MIN_UI_WIDTH: f32 = 800.;
 const SLIDER_WIDTH: f32 = 200.;
+const FLOAT_EDIT_WIDTH: f32 = 46.;
+
+// todo: PUt this elsewhere
+pub const PAYLOAD_SIZE_CONFIG: usize = crate::CONFIG_SIZE + PAYLOAD_START_I + CRC_LEN;
 
 impl SensorStatus {
     // Note Not included in Corvus
@@ -129,7 +135,7 @@ fn tx_pwr_from_val(val: u8) -> String {
         7 => "250mW",
         _ => "(Unknown)",
     }
-        .to_owned()
+    .to_owned()
 }
 
 enum LatLon {
@@ -166,6 +172,15 @@ fn rad_to_dms(rad: f32, lat_lon: LatLon) -> String {
     };
 
     format!("{deg_whole}° {mins_whole}' {:.2}\" {n_s}", secs)
+}
+
+fn text_edit_float(val: &mut f32, _default: f64, ui: &mut Ui) {
+    let mut entry = val.to_string();
+
+    let response = ui.add(egui::TextEdit::singleline(&mut entry).desired_width(FLOAT_EDIT_WIDTH));
+    if response.changed() {
+        *val = entry.parse::<f32>().unwrap_or(0.);
+    }
 }
 
 fn format_rpm(rpm: Option<u16>) -> String {
@@ -338,7 +353,7 @@ fn add_motor_commands(ui: &mut Ui, power: &mut MotorPower, rpms: &mut MotorRpms)
         (&mut power.aft_left, "Aft left power"),
         (&mut power.aft_right, "Aft right power"),
     ]
-        .into_iter()
+    .into_iter()
     {
         ui.add(
             // Offsets are to avoid gimball lock.
@@ -349,7 +364,7 @@ fn add_motor_commands(ui: &mut Ui, power: &mut MotorPower, rpms: &mut MotorRpms)
 
                 *motor_pwr as f64
             })
-                .text(label),
+            .text(label),
         );
     }
 }
@@ -475,26 +490,17 @@ fn batt_charge_to_color(charge: f32) -> Color32 {
 }
 
 fn add_system_status(ui: &mut Ui, system_status: &SystemStatus) {
-    ui.heading("System status"); // todo: Get this from FC; update on both sides.
+    ui.heading(RichText::new("System status").color(Color32::WHITE));
+    // ui.heading("System status"); // todo: Get this from FC; update on both sides.
 
     ui.horizontal(|ui| {
         add_sensor_status("IMU: ", system_status.imu, ui, true);
-        add_sensor_status(
-            "RF control link: ",
-            system_status.rf_control_link,
-            ui,
-            true,
-        );
-        add_sensor_status("RPM readings: ", system_status.esc_rpm, ui, true);
+        add_sensor_status("RF control link: ", system_status.rf_control_link, ui, true);
+        add_sensor_status("RPM readings: ", system_status.esc_rpm, ui, false);
         add_sensor_status("Baro altimeter: ", system_status.baro, ui, false);
         add_sensor_status("AGL altimeter: ", system_status.tof, ui, false);
         add_sensor_status("GNSS (ie GPS): ", system_status.gps, ui, false);
-        add_sensor_status(
-            "Magnetometer: ",
-            system_status.magnetometer,
-            ui,
-            false,
-        );
+        add_sensor_status("Magnetometer: ", system_status.magnetometer, ui, false);
         add_sensor_status("SPI flash: ", system_status.flash_spi, ui, false);
         // add_sensor_status("ESC telemetry: ", system_status.esc_telemetry, ui);
 
@@ -571,6 +577,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
             ConnectionStatus::Connected => (),
             ConnectionStatus::NotConnected => {
                 add_not_connected_page(ui);
+                state.config_ui = None;
                 return; // todo?
             }
         }
@@ -810,7 +817,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                                 Button::new(
                                     RichText::new("Change motor mapping").color(Color32::BLACK),
                                 )
-                                    .fill(Color32::from_rgb(220, 120, 10)),
+                                .fill(Color32::from_rgb(220, 120, 10)),
                             )
                             .clicked()
                         {
@@ -845,7 +852,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                                         3,
                                     ),
                                 ]
-                                    .into_iter()
+                                .into_iter()
                                 {
                                     // todo: For now, only set up for quad
                                     ui.vertical(|ui| {
@@ -888,7 +895,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                                         state.control_mapping_quad.m4_reversed,
                                     ),
                                 ]
-                                    .into_iter()
+                                .into_iter()
                                 {
                                     ui.vertical(|ui| {
                                         ui.label(label);
@@ -910,44 +917,90 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                     &mut state.rpms_commanded_from_ui,
                 );
 
-                if ui
-                    .add(
-                        Button::new(RichText::new("Start Motors").color(Color32::BLACK))
-                            .fill(Color32::from_rgb(220, 120, 10)),
-                    )
-                    .clicked()
-                {
-                    match state.common.get_port() {
-                        Ok(p) => {
-                            send_cmd::<MsgType>(MsgType::StartMotors, p).ok();
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(
+                            Button::new(RichText::new("Start Motors").color(Color32::BLACK))
+                                .fill(Color32::from_rgb(220, 120, 10)),
+                        )
+                        .clicked()
+                    {
+                        match state.common.get_port() {
+                            Ok(p) => {
+                                send_cmd::<MsgType>(MsgType::StartMotors, p).ok();
+                            }
+                            Err(_) => {}
                         }
-                        Err(_) => {}
-                    }
-                };
+                    };
 
-                // todo: DRY. Use a loop.(?)
+                    // todo: DRY. Use a loop.(?)
 
-                if ui
-                    .add(
-                        Button::new(RichText::new("Stop Motors").color(Color32::BLACK))
-                            .fill(Color32::from_rgb(220, 120, 10)),
-                    )
-                    .clicked()
-                {
-                    match state.common.get_port() {
-                        Ok(p) => {
-                            send_cmd::<MsgType>(MsgType::StopMotors, p).ok();
+                    if ui
+                        .add(
+                            Button::new(RichText::new("Stop Motors").color(Color32::BLACK))
+                                .fill(Color32::from_rgb(220, 120, 10)),
+                        )
+                        .clicked()
+                    {
+                        match state.common.get_port() {
+                            Ok(p) => {
+                                send_cmd::<MsgType>(MsgType::StopMotors, p).ok();
+                            }
+                            Err(_) => {}
                         }
-                        Err(_) => {}
-                    }
-                };
+                    };
+                });
             }
+
             AircraftType::FixedWing => {
                 ui.heading("Servo commands");
 
                 ui.add_space(SPACE_BETWEEN_SECTIONS);
             }
         }
+
+        ui.heading("PID Coefficients");
+
+        ui.horizontal(|ui| match &mut state.config_ui {
+            Some(config_ui) => {
+                let p_label =
+                    &("P: ".to_owned() + &state.config_on_device.pid_coeffs.p.to_string());
+                let i_label =
+                    &("I: ".to_owned() + &state.config_on_device.pid_coeffs.i.to_string());
+                let d_label =
+                    &("D: ".to_owned() + &state.config_on_device.pid_coeffs.d.to_string());
+
+                ui.label(p_label);
+                text_edit_float(&mut config_ui.pid_coeffs.p, 0., ui);
+                ui.label(i_label);
+                text_edit_float(&mut config_ui.pid_coeffs.i, 0., ui);
+
+                ui.label(d_label);
+                text_edit_float(&mut config_ui.pid_coeffs.d, 0., ui);
+
+                ui.add_space(SPACE_BETWEEN_SECTIONS);
+
+                if ui
+                    .add(
+                        Button::new(RichText::new("Save config to device").color(Color32::BLACK))
+                            .fill(Color32::from_rgb(220, 120, 10)),
+                    )
+                    .clicked()
+                {
+
+                    if send_payload::<MsgType, PAYLOAD_SIZE_CONFIG>(
+                        MsgType::SaveConfig,
+                        &config_ui.to_bytes(),
+                        state.common.get_port().unwrap(),
+                    )
+                    .is_err()
+                    {
+                        println!("Error saving config.")
+                    };
+                };
+            }
+            None => (),
+        });
     });
 
     engine_updates

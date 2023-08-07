@@ -22,15 +22,7 @@ pub const CONTROL_MAPPING_QUAD_SIZE: usize = 2; // For quad only atm. Address th
 
 pub const SET_MOTOR_POWER_SIZE: usize = F32_SIZE * 4;
 
-// Packet sizes are payload size + 2. Additional data are message type, and CRC.
-pub const PARAMS_PACKET_SIZE: usize = PARAMS_SIZE + 2;
-pub const CONTROLS_PACKET_SIZE: usize = CONTROLS_SIZE + 2;
-pub const LINK_STATS_PACKET_SIZE: usize = LINK_STATS_SIZE + 2;
-pub const WAYPOINTS_PACKET_SIZE: usize = WAYPOINTS_SIZE + 2;
-pub const SYS_AP_STATUS_PACKET_SIZE: usize = SYS_AP_STATUS_SIZE + 2;
-pub const CONTROL_MAPPING_QUAD_PACKET_SIZE: usize = CONTROL_MAPPING_QUAD_SIZE + 2;
-
-pub const SET_MOTOR_POWER_PACKET_SIZE: usize = SET_MOTOR_POWER_SIZE + 2;
+pub const CONFIG_SIZE: usize = F32_SIZE * 3; // todo: Currently PID only.
 
 pub struct DecodeError {}
 
@@ -91,6 +83,9 @@ pub enum MsgType {
     ControlMapping = 19,
     SetMotorPowers = 20,
     SetMotorRpms = 21,
+    Config = 22,
+    ReqConfig = 23,
+    SaveConfig = 24,
 }
 
 impl MessageType for MsgType {
@@ -122,7 +117,46 @@ impl MessageType for MsgType {
             Self::ControlMapping => CONTROL_MAPPING_QUAD_SIZE,
             Self::SetMotorPowers => SET_MOTOR_POWER_SIZE,
             Self::SetMotorRpms => SET_MOTOR_POWER_SIZE,
+            Self::Config => CONFIG_SIZE,
+            Self::ReqConfig => 0,
+            Self::SaveConfig => CONFIG_SIZE,
         }
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct PidCoeffs {
+    pub p: f32,
+    pub i: f32,
+    pub d: f32,
+}
+
+#[derive(Default, Clone)]
+pub struct UserConfig {
+    pub pid_coeffs: PidCoeffs,
+}
+
+impl UserConfig {
+    pub fn from_bytes(buf: &[u8]) -> Self {
+        let pid_coeffs = PidCoeffs {
+            p: f32::from_be_bytes(buf[0..4].try_into().unwrap()),
+            i: f32::from_be_bytes(buf[4..8].try_into().unwrap()),
+            d: f32::from_be_bytes(buf[8..12].try_into().unwrap()),
+        };
+        Self {
+            pid_coeffs,
+            ..Default::default()
+        }
+    }
+
+    pub fn to_bytes(&self) -> [u8; CONFIG_SIZE] {
+        let mut result = [0; CONFIG_SIZE];
+
+        result[..4].clone_from_slice(&self.pid_coeffs.p.to_be_bytes());
+        result[4..8].clone_from_slice(&self.pid_coeffs.i.to_be_bytes());
+        result[8..12].clone_from_slice(&self.pid_coeffs.d.to_be_bytes());
+
+        result
     }
 }
 
@@ -297,7 +331,6 @@ pub struct SystemStatus {
     pub rf_control_fault: bool,
     pub esc_rpm_fault: bool,
 }
-
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum AltType {

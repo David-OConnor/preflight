@@ -16,7 +16,7 @@ use std::{
 
 use pc_interface_shared::{self, send_cmd, send_payload};
 
-use anyleaf_usb::{CRC_LEN, PAYLOAD_START_I, bytes_to_float};
+use anyleaf_usb::{bytes_to_float, CRC_LEN, PAYLOAD_START_I};
 
 use lin_alg2::f32::Quaternion;
 use types::*;
@@ -67,6 +67,8 @@ pub struct State {
     current_pwr: MotorPower,
     pub pwr_commanded_from_ui: MotorPower,
     pub rpms_commanded_from_ui: MotorRpms,
+    config_ui: Option<UserConfig>,
+    config_on_device: UserConfig,
 }
 
 impl Default for State {
@@ -107,13 +109,14 @@ impl Default for State {
             current_pwr: Default::default(),
             pwr_commanded_from_ui: Default::default(),
             rpms_commanded_from_ui: Default::default(),
+            config_ui: None,
+            config_on_device: Default::default(),
         }
     }
 }
 
 impl State {
     /// Read parameters, such as attitude and altitutde
-    // pub fn read_params(&mut self, port: &Box<dyn SerialPort>) -> Result<(), io::Error> {
     pub fn read_params(&mut self) -> Result<(), io::Error> {
         let port = self.common.get_port()?;
 
@@ -203,7 +206,6 @@ impl State {
     }
 
     /// Read system status, and autopilot status
-    // pub fn read_controls(&mut self, port: &Box<dyn SerialPort>) -> Result<(), io::Error> {
     pub fn read_sys_ap_status(&mut self) -> Result<(), io::Error> {
         // todo: DRY with port. Trouble passing it as a param due to box<dyn
         let port = self.common.get_port()?;
@@ -224,7 +226,6 @@ impl State {
     }
 
     /// Read control channel data.
-    // pub fn read_controls(&mut self, port: &Box<dyn SerialPort>) -> Result<(), io::Error> {
     pub fn read_controls(&mut self) -> Result<(), io::Error> {
         let port = self.common.get_port()?;
 
@@ -243,9 +244,7 @@ impl State {
     }
 
     /// Read controller link stats data.
-    // pub fn read_link_stats(&mut self, port: &Box<dyn SerialPort>) -> Result<(), io::Error> {
     pub fn read_link_stats(&mut self) -> Result<(), io::Error> {
-        // todo: DRY with port. Trouble passing it as a param due to box<dyn
         let port = self.common.get_port()?;
 
         send_cmd::<MsgType>(MsgType::ReqLinkStats, port)?;
@@ -263,8 +262,32 @@ impl State {
         Ok(())
     }
 
+    /// Read configuration data.
+    pub fn read_config(&mut self) -> Result<(), io::Error> {
+        let port = self.common.get_port()?;
+
+        send_cmd::<MsgType>(MsgType::ReqConfig, port)?;
+
+        let mut rx_buf = [0; CONFIG_SIZE + PAYLOAD_START_I + CRC_LEN];
+        port.read_exact(&mut rx_buf)?;
+
+        // let config: [u8; CONFIG_SIZE] = rx_buf
+        //     [PAYLOAD_START_I..CONFIG_SIZE + PAYLOAD_START_I]
+        //     .try_into()
+        //     .unwrap();
+
+        self.config_on_device =
+            UserConfig::from_bytes(&rx_buf[PAYLOAD_START_I..CONFIG_SIZE + PAYLOAD_START_I]);
+
+        // Eg init
+        if self.config_ui.is_none() {
+            self.config_ui = Some(self.config_on_device.clone());
+        }
+
+        Ok(())
+    }
+
     /// Read waypoints data from the flight controller.
-    // pub fn read_waypoints(&mut self, port: &Box<dyn SerialPort>) -> Result<(), io::Error> {
     pub fn read_waypoints(&mut self) -> Result<(), io::Error> {
         let port = self.common.get_port()?;
 
@@ -314,6 +337,7 @@ impl State {
         self.read_sys_ap_status()?;
         self.read_controls()?;
         self.read_link_stats()?;
+        self.read_config()?;
         // todo: Put back; issue with it to correct.
         // self.read_waypoints()?;
 
@@ -488,7 +512,6 @@ struct SetServoPositionData {
 // todo: Baud cfg?
 
 // pub enum SerialError {};
-
 
 fn main() {
     let mut state = State::default();
