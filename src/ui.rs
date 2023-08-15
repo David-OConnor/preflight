@@ -506,6 +506,7 @@ fn add_system_status(ui: &mut Ui, system_status: &SystemStatus) {
     ui.horizontal(|ui| {
         add_sensor_status("IMU: ", system_status.imu, ui, true);
         add_sensor_status("RF control link: ", system_status.rf_control_link, ui, true);
+        add_sensor_status("OSD: ", system_status.osd, ui, true);
         add_sensor_status("RPM readings: ", system_status.esc_rpm, ui, false);
         add_sensor_status("Baro altimeter: ", system_status.baro, ui, false);
         add_sensor_status("AGL altimeter: ", system_status.tof, ui, false);

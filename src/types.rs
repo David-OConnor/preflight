@@ -15,7 +15,7 @@ pub const WAYPOINT_SIZE: usize = F32_SIZE * 3 + WAYPOINT_MAX_NAME_LEN + 1;
 pub const WAYPOINTS_SIZE: usize = MAX_WAYPOINTS * WAYPOINT_SIZE;
 pub const SET_SERVO_POSIT_SIZE: usize = 1 + F32_SIZE;
 pub const WAYPOINT_MAX_NAME_LEN: usize = 7;
-pub const SYS_STATUS_SIZE: usize = 11;
+pub const SYS_STATUS_SIZE: usize = 12;
 pub const AP_STATUS_SIZE: usize = 0; // todo
 pub const SYS_AP_STATUS_SIZE: usize = SYS_STATUS_SIZE + AP_STATUS_SIZE;
 pub const CONTROL_MAPPING_QUAD_SIZE: usize = 2; // For quad only atm. Address this.
@@ -328,6 +328,7 @@ pub struct SystemStatus {
     pub esc_rpm: SensorStatus,
     pub rf_control_link: SensorStatus,
     pub flash_spi: SensorStatus,
+    pub osd: SensorStatus,
     pub rf_control_fault: bool,
     pub esc_rpm_fault: bool,
 }

@@ -410,8 +410,9 @@ impl From<[u8; SYS_STATUS_SIZE]> for SystemStatus {
             esc_rpm: p[6].try_into().unwrap_or_default(),
             rf_control_link: p[7].try_into().unwrap_or_default(),
             flash_spi: p[8].try_into().unwrap_or_default(),
-            rf_control_fault: p[9] != 0,
-            esc_rpm_fault: p[10] != 0,
+            osd: p[9].try_into().unwrap_or_default(),
+            rf_control_fault: p[10] != 0,
+            esc_rpm_fault: p[11] != 0,
         }
     }
 }
