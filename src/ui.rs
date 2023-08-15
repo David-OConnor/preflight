@@ -135,7 +135,7 @@ fn tx_pwr_from_val(val: u8) -> String {
         7 => "250mW",
         _ => "(Unknown)",
     }
-    .to_owned()
+        .to_owned()
 }
 
 enum LatLon {
@@ -363,7 +363,7 @@ fn add_motor_commands(ui: &mut Ui, power: &mut MotorPower, rpms: &mut MotorRpms)
         (&mut power.aft_left, "Aft left power"),
         (&mut power.aft_right, "Aft right power"),
     ]
-    .into_iter()
+        .into_iter()
     {
         ui.add(
             // Offsets are to avoid gimball lock.
@@ -374,7 +374,7 @@ fn add_motor_commands(ui: &mut Ui, power: &mut MotorPower, rpms: &mut MotorRpms)
 
                 *motor_pwr as f64
             })
-            .text(label),
+                .text(label),
         );
     }
 }
@@ -593,446 +593,449 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
             }
         }
 
-        // ui.vscroll(true);
+        egui::containers::ScrollArea::vertical()
+            // .max_height(400.)
+            .show(ui, |ui| {
 
-        ui.spacing_mut().item_spacing = egui::vec2(ITEM_SPACING_X, ITEM_SPACING_Y);
+                ui.spacing_mut().item_spacing = egui::vec2(ITEM_SPACING_X, ITEM_SPACING_Y);
 
-        ui.spacing_mut().slider_width = SLIDER_WIDTH;
+                ui.spacing_mut().slider_width = SLIDER_WIDTH;
 
-        // ui.heading("AnyLeaf Preflight");
+                // ui.heading("AnyLeaf Preflight");
 
-        let aircraft_type = match state.aircraft_type {
-            AircraftType::Quadcopter => "Quadcopter",
-            AircraftType::FixedWing => "Fixed wing",
-        };
+                let aircraft_type = match state.aircraft_type {
+                    AircraftType::Quadcopter => "Quadcopter",
+                    AircraftType::FixedWing => "Fixed wing",
+                };
 
-        ui.heading(format!("Aircraft type: {}", aircraft_type));
+                ui.heading(format!("Aircraft type: {}", aircraft_type));
 
-        add_system_status(ui, &state.system_status);
+                add_system_status(ui, &state.system_status);
 
-        ui.add_space(SPACE_BETWEEN_SECTIONS);
-
-        ui.vertical(|ui| {
-            ui.heading("Sensors");
-
-            ui.horizontal(|ui| {
-                // todo: Center these.
-                ui.vertical(|ui| {
-                    ui.label("Altitude baro:");
-                    ui.label(format!("{:.1} m", state.altitude_baro));
-                });
+                ui.add_space(SPACE_BETWEEN_SECTIONS);
 
                 ui.vertical(|ui| {
-                    ui.label("Pressure (kPa):");
-                    ui.label(format!("{:.3}", state.pressure_static / 1_000.));
-                });
+                    ui.heading("Sensors");
 
-                ui.vertical(|ui| {
-                    ui.label("Temp (°C):");
-                    ui.label(format!("{:.1}", state.temp_baro - 273.15));
-                });
-                // todo: Display pressure and temperature here to, to QC.
-                ui.add_space(SPACING_HORIZONTAL);
-
-                if state.altitude_agl.is_some() {
-                    ui.vertical(|ui| {
-                        ui.label("Altitude AGL:");
-                        ui.label(&agl);
-                    });
-                    ui.add_space(SPACING_HORIZONTAL);
-                }
-
-                ui.vertical(|ui| {
-                    ui.label("Batt cell count:");
-                    let selected = &mut state.batt_cell_count;
-                    ComboBox::from_id_source(0)
-                        .width(60.)
-                        .selected_text(selected.as_str())
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(selected, BattCellCount::S2, "2S");
-                            ui.selectable_value(selected, BattCellCount::S3, "3S");
-                            ui.selectable_value(selected, BattCellCount::S4, "4S");
-                            ui.selectable_value(selected, BattCellCount::S6, "6S");
-                            ui.selectable_value(selected, BattCellCount::S8, "8S");
+                    ui.horizontal(|ui| {
+                        // todo: Center these.
+                        ui.vertical(|ui| {
+                            ui.label("Altitude baro:");
+                            ui.label(format!("{:.1} m", state.altitude_baro));
                         });
+
+                        ui.vertical(|ui| {
+                            ui.label("Pressure (kPa):");
+                            ui.label(format!("{:.3}", state.pressure_static / 1_000.));
+                        });
+
+                        ui.vertical(|ui| {
+                            ui.label("Temp (°C):");
+                            ui.label(format!("{:.1}", state.temp_baro - 273.15));
+                        });
+                        // todo: Display pressure and temperature here to, to QC.
+                        ui.add_space(SPACING_HORIZONTAL);
+
+                        if state.altitude_agl.is_some() {
+                            ui.vertical(|ui| {
+                                ui.label("Altitude AGL:");
+                                ui.label(&agl);
+                            });
+                            ui.add_space(SPACING_HORIZONTAL);
+                        }
+
+                        ui.vertical(|ui| {
+                            ui.label("Batt cell count:");
+                            let selected = &mut state.batt_cell_count;
+                            ComboBox::from_id_source(0)
+                                .width(60.)
+                                .selected_text(selected.as_str())
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(selected, BattCellCount::S2, "2S");
+                                    ui.selectable_value(selected, BattCellCount::S3, "3S");
+                                    ui.selectable_value(selected, BattCellCount::S4, "4S");
+                                    ui.selectable_value(selected, BattCellCount::S6, "6S");
+                                    ui.selectable_value(selected, BattCellCount::S8, "8S");
+                                });
+                        });
+                        ui.add_space(SPACING_HORIZONTAL);
+
+                        // todo: Add user-selectable battery cell field. Have this save somewhere
+                        // todo on the computer.
+                        // todo: Color-code appropriately.
+
+                        let batt_connected = state.batt_v > 0.1;
+
+                        // todo: Consider filtering instead with a LP.
+                        // Round to avoid a jittery progress bar.
+                        // let batt_v = (state.batt_v * 10.).round() / 10.;
+                        let batt_v = state.batt_v;
+
+                        let batt_life = batt_left_from_v(batt_v, state.batt_cell_count);
+                        ui.vertical(|ui| {
+                            ui.label("Batt Volts:");
+                            // ui.label(format!("{:.1}", &state.batt_v));
+                            if batt_connected {
+                                ui.label(
+                                    RichText::new(format!("{:.1}", batt_v))
+                                        .color(batt_charge_to_color(batt_life)),
+                                );
+                            } else {
+                                ui.label(RichText::new("Not connected").color(Color32::GOLD));
+                            }
+                        });
+                        ui.add_space(SPACING_HORIZONTAL);
+
+                        if batt_connected {
+                            // tood: Color the bar.
+                            ui.vertical(|ui| {
+                                ui.label("Batt Life");
+                                let bar = ProgressBar::new(batt_life).desired_width(BATT_LIFE_WIDTH);
+                                ui.add(bar);
+                            });
+                            ui.add_space(SPACING_HORIZONTAL);
+                        }
+
+                        ui.vertical(|ui| {
+                            ui.label("ESC current (A):");
+                            ui.label(format!("{:.1}", &state.current));
+                        });
+                        ui.add_space(SPACING_HORIZONTAL);
+
+                        if state.lat.is_some() && state.lon.is_some() {
+                            // todo: Separate PPKS section A/r
+                            ui.vertical(|ui| {
+                                ui.label("Latitude:");
+                                ui.label(lat);
+                            });
+
+                            ui.vertical(|ui| {
+                                ui.label("Longitude:");
+                                ui.label(lon);
+                            });
+                        } else {
+                            // ui.label("GNSS not connected)");
+                            // ui.label(""); // Spacer
+                        }
+                    });
+
+                    ui.add_space(SPACE_BETWEEN_SECTIONS);
+
+                    add_control_data(state.system_status.rf_control_link, &state.controls, ui);
                 });
-                ui.add_space(SPACING_HORIZONTAL);
 
-                // todo: Add user-selectable battery cell field. Have this save somewhere
-                // todo on the computer.
-                // todo: Color-code appropriately.
+                // todo: Input mode switch etc.
 
-                let batt_connected = state.batt_v > 0.1;
+                ui.add_space(SPACE_BETWEEN_SECTIONS);
 
-                // todo: Consider filtering instead with a LP.
-                // Round to avoid a jittery progress bar.
-                // let batt_v = (state.batt_v * 10.).round() / 10.;
-                let batt_v = state.batt_v;
+                ui.heading("Control link signal");
+                // todo: Evaluate which of these you want.
+                // todo: RSSI 2, antenna etc A/R only if full diversity
 
-                let batt_life = batt_left_from_v(batt_v, state.batt_cell_count);
-                ui.vertical(|ui| {
-                    ui.label("Batt Volts:");
-                    // ui.label(format!("{:.1}", &state.batt_v));
-                    if batt_connected {
-                        ui.label(
-                            RichText::new(format!("{:.1}", batt_v))
-                                .color(batt_charge_to_color(batt_life)),
-                        );
-                    } else {
-                        ui.label(RichText::new("Not connected").color(Color32::GOLD));
-                    }
-                });
-                ui.add_space(SPACING_HORIZONTAL);
+                add_link_stats(state.system_status.rf_control_link, &state.link_stats, ui);
 
-                if batt_connected {
-                    // tood: Color the bar.
+                ui.add_space(SPACE_BETWEEN_SECTIONS);
+
+                ui.heading("Autopilot status");
+
+                ui.horizontal(|ui| {
                     ui.vertical(|ui| {
-                        ui.label("Batt Life");
-                        let bar = ProgressBar::new(batt_life).desired_width(BATT_LIFE_WIDTH);
-                        ui.add(bar);
+                        ui.label("Alt hold");
+                        ui.label(&alt_hold);
                     });
                     ui.add_space(SPACING_HORIZONTAL);
-                }
 
-                ui.vertical(|ui| {
-                    ui.label("ESC current (A):");
-                    ui.label(format!("{:.1}", &state.current));
+                    ui.vertical(|ui| {
+                        ui.label("Heading hold");
+                        ui.label(&hdg_hold);
+                    });
+                    ui.add_space(SPACING_HORIZONTAL);
+
+                    // todo: When you put yaw and/or roll assist back, you probably
+                    // todo want one field for it.
+                    ui.vertical(|ui| {
+                        ui.label("Yaw assist");
+                        ui.label(yaw_assist);
+                    });
                 });
-                ui.add_space(SPACING_HORIZONTAL);
 
-                if state.lat.is_some() && state.lon.is_some() {
-                    // todo: Separate PPKS section A/r
-                    ui.vertical(|ui| {
-                        ui.label("Latitude:");
-                        ui.label(lat);
-                    });
+                ui.add_space(SPACE_BETWEEN_SECTIONS);
 
-                    ui.vertical(|ui| {
-                        ui.label("Longitude:");
-                        ui.label(lon);
-                    });
-                } else {
-                    // ui.label("GNSS not connected)");
-                    // ui.label(""); // Spacer
-                }
-            });
-
-            ui.add_space(SPACE_BETWEEN_SECTIONS);
-
-            add_control_data(state.system_status.rf_control_link, &state.controls, ui);
-        });
-
-        // todo: Input mode switch etc.
-
-        ui.add_space(SPACE_BETWEEN_SECTIONS);
-
-        ui.heading("Control link signal");
-        // todo: Evaluate which of these you want.
-        // todo: RSSI 2, antenna etc A/R only if full diversity
-
-        add_link_stats(state.system_status.rf_control_link, &state.link_stats, ui);
-
-        ui.add_space(SPACE_BETWEEN_SECTIONS);
-
-        ui.heading("Autopilot status");
-
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.label("Alt hold");
-                ui.label(&alt_hold);
-            });
-            ui.add_space(SPACING_HORIZONTAL);
-
-            ui.vertical(|ui| {
-                ui.label("Heading hold");
-                ui.label(&hdg_hold);
-            });
-            ui.add_space(SPACING_HORIZONTAL);
-
-            // todo: When you put yaw and/or roll assist back, you probably
-            // todo want one field for it.
-            ui.vertical(|ui| {
-                ui.label("Yaw assist");
-                ui.label(yaw_assist);
-            });
-        });
-
-        ui.add_space(SPACE_BETWEEN_SECTIONS);
-
-        ui.heading("Motor power settings and RPM");
+                ui.heading("Motor power settings and RPM");
 
 
-        // todo: Put back
-        // todo: Color-code power and perhaps RPM.
-        // ui.horizontal(|ui| {
-        //     ui.vertical(|ui| {
-        //         ui.label("Motor 1 power");
-        //         ui.label(format!("{:.3}", &state.current_pwr.front_left));
-        //     });
-        //     ui.add_space(SPACING_HORIZONTAL);
-        //
-        //     ui.vertical(|ui| {
-        //         ui.label("Motor 2 power");
-        //         ui.label(format!("{:.3}", &state.current_pwr.front_right));
-        //     });
-        //     ui.add_space(SPACING_HORIZONTAL);
-        //
-        //     ui.vertical(|ui| {
-        //         ui.label("Motor 3 power");
-        //         ui.label(format!("{:.3}", &state.current_pwr.aft_left));
-        //     });
-        //     ui.add_space(SPACING_HORIZONTAL);
-        //
-        //     ui.vertical(|ui| {
-        //         ui.label("Motor 4 Rpower");
-        //         ui.label(format!("{:.3}", &state.current_pwr.aft_right));
-        //     });
-        // });
-
-        // todo: Motors 1-4 vs positions?
-
-        ui.add_space(SPACE_BETWEEN_SECTIONS);
-
-        match state.aircraft_type {
-            AircraftType::Quadcopter => {
-
-                //
-                //
+                // todo: Put back
+                // todo: Color-code power and perhaps RPM.
                 // ui.horizontal(|ui| {
-                //     ui.horizontal(|ui| {
-                //         ui.vertical(|ui| {
-                //             ui.label("Motor 1 RPM");
-                //             ui.label(&format_rpm(state.rpm_readings.front_left));
-                //         });
-                //         ui.add_space(SPACING_HORIZONTAL);
-                //
-                //         ui.vertical(|ui| {
-                //             ui.label("Motor 2 RPM");
-                //             ui.label(&format_rpm(state.rpm_readings.front_right));
-                //         });
-                //         ui.add_space(SPACING_HORIZONTAL);
-                //
-                //         ui.vertical(|ui| {
-                //             ui.label("Motor 3 RPM");
-                //             ui.label(&format_rpm(state.rpm_readings.aft_left));
-                //         });
-                //         ui.add_space(SPACING_HORIZONTAL);
-                //
-                //         ui.vertical(|ui| {
-                //             ui.label("Motor 4 RPM");
-                //             ui.label(&format_rpm(state.rpm_readings.aft_right));
-                //         });
+                //     ui.vertical(|ui| {
+                //         ui.label("Motor 1 power");
+                //         ui.label(format!("{:.3}", &state.current_pwr.front_left));
                 //     });
+                //     ui.add_space(SPACING_HORIZONTAL);
                 //
                 //     ui.vertical(|ui| {
-                //         ui.heading("Motor mapping");
+                //         ui.label("Motor 2 power");
+                //         ui.label(format!("{:.3}", &state.current_pwr.front_right));
+                //     });
+                //     ui.add_space(SPACING_HORIZONTAL);
                 //
-                //         // todo: Warning color
-                //         if ui
-                //             .add(
-                //                 Button::new(
-                //                     RichText::new("Change motor mapping").color(Color32::BLACK),
-                //                 )
-                //                 .fill(Color32::from_rgb(220, 120, 10)),
-                //             )
-                //             .clicked()
-                //         {
-                //             state.editing_motor_mapping = !state.editing_motor_mapping;
-                //         };
+                //     ui.vertical(|ui| {
+                //         ui.label("Motor 3 power");
+                //         ui.label(format!("{:.3}", &state.current_pwr.aft_left));
+                //     });
+                //     ui.add_space(SPACING_HORIZONTAL);
                 //
-                //         if state.editing_motor_mapping {
-                //             ui.horizontal(|ui| {
-                //                 for (label, value, reversed, id) in [
-                //                     (
-                //                         "Motor 1",
-                //                         state.control_mapping_quad.m1,
-                //                         &mut state.control_mapping_quad.m1_reversed,
-                //                         0,
-                //                     ),
-                //                     (
-                //                         "Motor 2",
-                //                         state.control_mapping_quad.m2,
-                //                         &mut state.control_mapping_quad.m2_reversed,
-                //                         1,
-                //                     ),
-                //                     (
-                //                         "Motor 3",
-                //                         state.control_mapping_quad.m3,
-                //                         &mut state.control_mapping_quad.m3_reversed,
-                //                         2,
-                //                     ),
-                //                     (
-                //                         "Motor 4",
-                //                         state.control_mapping_quad.m4,
-                //                         &mut state.control_mapping_quad.m4_reversed,
-                //                         3,
-                //                     ),
-                //                 ]
-                //                 .into_iter()
-                //                 {
-                //                     // todo: For now, only set up for quad
-                //                     ui.vertical(|ui| {
-                //                         ui.label(label);
-                //                         ui.label(value.as_str());
-                //
-                //                         let mut selected = reversed;
-                //                         ComboBox::from_id_source(id)
-                //                             .width(MOTOR_MAPPING_DROPDOWN_WIDTH)
-                //                             .selected_text(motor_dir_format(*selected))
-                //                             .show_ui(ui, |ui| {
-                //                                 ui.selectable_value(selected, false, "Normal");
-                //                                 ui.selectable_value(selected, true, "Reversed");
-                //                             });
-                //                     });
-                //                     ui.add_space(SPACING_HORIZONTAL);
-                //                 }
-                //             });
-                //         } else {
-                //             ui.horizontal(|ui| {
-                //                 for (label, value, reversed) in [
-                //                     (
-                //                         "Motor 1",
-                //                         state.control_mapping_quad.m1,
-                //                         state.control_mapping_quad.m1_reversed,
-                //                     ),
-                //                     (
-                //                         "Motor 2",
-                //                         state.control_mapping_quad.m2,
-                //                         state.control_mapping_quad.m2_reversed,
-                //                     ),
-                //                     (
-                //                         "Motor 3",
-                //                         state.control_mapping_quad.m3,
-                //                         state.control_mapping_quad.m3_reversed,
-                //                     ),
-                //                     (
-                //                         "Motor 4",
-                //                         state.control_mapping_quad.m4,
-                //                         state.control_mapping_quad.m4_reversed,
-                //                     ),
-                //                 ]
-                //                 .into_iter()
-                //                 {
-                //                     ui.vertical(|ui| {
-                //                         ui.label(label);
-                //                         ui.label(value.as_str());
-                //                         ui.label(motor_dir_format(reversed));
-                //                     });
-                //                     ui.add_space(SPACING_HORIZONTAL);
-                //                 }
-                //             });
-                //         }
+                //     ui.vertical(|ui| {
+                //         ui.label("Motor 4 Rpower");
+                //         ui.label(format!("{:.3}", &state.current_pwr.aft_right));
                 //     });
                 // });
 
+                // todo: Motors 1-4 vs positions?
+
                 ui.add_space(SPACE_BETWEEN_SECTIONS);
 
-                add_motor_commands(
-                    ui,
-                    &mut state.pwr_commanded_from_ui,
-                    &mut state.rpms_commanded_from_ui,
-                );
+                match state.aircraft_type {
+                    AircraftType::Quadcopter => {
 
-                ui.horizontal(|ui| {
-                    if ui
-                        .add(
-                            Button::new(RichText::new("Start Motors").color(Color32::BLACK))
-                                .fill(Color32::from_rgb(220, 120, 10)),
-                        )
-                        .clicked()
-                    {
-                        match state.common.get_port() {
-                            Ok(p) => {
-                                send_cmd::<MsgType>(MsgType::StartMotors, p).ok();
-                            }
-                            Err(_) => {}
-                        }
-                    };
+                        //
+                        //
+                        // ui.horizontal(|ui| {
+                        //     ui.horizontal(|ui| {
+                        //         ui.vertical(|ui| {
+                        //             ui.label("Motor 1 RPM");
+                        //             ui.label(&format_rpm(state.rpm_readings.front_left));
+                        //         });
+                        //         ui.add_space(SPACING_HORIZONTAL);
+                        //
+                        //         ui.vertical(|ui| {
+                        //             ui.label("Motor 2 RPM");
+                        //             ui.label(&format_rpm(state.rpm_readings.front_right));
+                        //         });
+                        //         ui.add_space(SPACING_HORIZONTAL);
+                        //
+                        //         ui.vertical(|ui| {
+                        //             ui.label("Motor 3 RPM");
+                        //             ui.label(&format_rpm(state.rpm_readings.aft_left));
+                        //         });
+                        //         ui.add_space(SPACING_HORIZONTAL);
+                        //
+                        //         ui.vertical(|ui| {
+                        //             ui.label("Motor 4 RPM");
+                        //             ui.label(&format_rpm(state.rpm_readings.aft_right));
+                        //         });
+                        //     });
+                        //
+                        //     ui.vertical(|ui| {
+                        //         ui.heading("Motor mapping");
+                        //
+                        //         // todo: Warning color
+                        //         if ui
+                        //             .add(
+                        //                 Button::new(
+                        //                     RichText::new("Change motor mapping").color(Color32::BLACK),
+                        //                 )
+                        //                 .fill(Color32::from_rgb(220, 120, 10)),
+                        //             )
+                        //             .clicked()
+                        //         {
+                        //             state.editing_motor_mapping = !state.editing_motor_mapping;
+                        //         };
+                        //
+                        //         if state.editing_motor_mapping {
+                        //             ui.horizontal(|ui| {
+                        //                 for (label, value, reversed, id) in [
+                        //                     (
+                        //                         "Motor 1",
+                        //                         state.control_mapping_quad.m1,
+                        //                         &mut state.control_mapping_quad.m1_reversed,
+                        //                         0,
+                        //                     ),
+                        //                     (
+                        //                         "Motor 2",
+                        //                         state.control_mapping_quad.m2,
+                        //                         &mut state.control_mapping_quad.m2_reversed,
+                        //                         1,
+                        //                     ),
+                        //                     (
+                        //                         "Motor 3",
+                        //                         state.control_mapping_quad.m3,
+                        //                         &mut state.control_mapping_quad.m3_reversed,
+                        //                         2,
+                        //                     ),
+                        //                     (
+                        //                         "Motor 4",
+                        //                         state.control_mapping_quad.m4,
+                        //                         &mut state.control_mapping_quad.m4_reversed,
+                        //                         3,
+                        //                     ),
+                        //                 ]
+                        //                 .into_iter()
+                        //                 {
+                        //                     // todo: For now, only set up for quad
+                        //                     ui.vertical(|ui| {
+                        //                         ui.label(label);
+                        //                         ui.label(value.as_str());
+                        //
+                        //                         let mut selected = reversed;
+                        //                         ComboBox::from_id_source(id)
+                        //                             .width(MOTOR_MAPPING_DROPDOWN_WIDTH)
+                        //                             .selected_text(motor_dir_format(*selected))
+                        //                             .show_ui(ui, |ui| {
+                        //                                 ui.selectable_value(selected, false, "Normal");
+                        //                                 ui.selectable_value(selected, true, "Reversed");
+                        //                             });
+                        //                     });
+                        //                     ui.add_space(SPACING_HORIZONTAL);
+                        //                 }
+                        //             });
+                        //         } else {
+                        //             ui.horizontal(|ui| {
+                        //                 for (label, value, reversed) in [
+                        //                     (
+                        //                         "Motor 1",
+                        //                         state.control_mapping_quad.m1,
+                        //                         state.control_mapping_quad.m1_reversed,
+                        //                     ),
+                        //                     (
+                        //                         "Motor 2",
+                        //                         state.control_mapping_quad.m2,
+                        //                         state.control_mapping_quad.m2_reversed,
+                        //                     ),
+                        //                     (
+                        //                         "Motor 3",
+                        //                         state.control_mapping_quad.m3,
+                        //                         state.control_mapping_quad.m3_reversed,
+                        //                     ),
+                        //                     (
+                        //                         "Motor 4",
+                        //                         state.control_mapping_quad.m4,
+                        //                         state.control_mapping_quad.m4_reversed,
+                        //                     ),
+                        //                 ]
+                        //                 .into_iter()
+                        //                 {
+                        //                     ui.vertical(|ui| {
+                        //                         ui.label(label);
+                        //                         ui.label(value.as_str());
+                        //                         ui.label(motor_dir_format(reversed));
+                        //                     });
+                        //                     ui.add_space(SPACING_HORIZONTAL);
+                        //                 }
+                        //             });
+                        //         }
+                        //     });
+                        // });
 
-                    // todo: DRY. Use a loop.(?)
+                        ui.add_space(SPACE_BETWEEN_SECTIONS);
 
-                    if ui
-                        .add(
-                            Button::new(RichText::new("Stop Motors").color(Color32::BLACK))
-                                .fill(Color32::from_rgb(220, 120, 10)),
-                        )
-                        .clicked()
-                    {
-                        match state.common.get_port() {
-                            Ok(p) => {
-                                send_cmd::<MsgType>(MsgType::StopMotors, p).ok();
-                            }
-                            Err(_) => {}
-                        }
-                    };
+                        add_motor_commands(
+                            ui,
+                            &mut state.pwr_commanded_from_ui,
+                            &mut state.rpms_commanded_from_ui,
+                        );
+
+                        ui.horizontal(|ui| {
+                            if ui
+                                .add(
+                                    Button::new(RichText::new("Start Motors").color(Color32::BLACK))
+                                        .fill(Color32::from_rgb(220, 120, 10)),
+                                )
+                                .clicked()
+                            {
+                                match state.common.get_port() {
+                                    Ok(p) => {
+                                        send_cmd::<MsgType>(MsgType::StartMotors, p).ok();
+                                    }
+                                    Err(_) => {}
+                                }
+                            };
+
+                            // todo: DRY. Use a loop.(?)
+
+                            if ui
+                                .add(
+                                    Button::new(RichText::new("Stop Motors").color(Color32::BLACK))
+                                        .fill(Color32::from_rgb(220, 120, 10)),
+                                )
+                                .clicked()
+                            {
+                                match state.common.get_port() {
+                                    Ok(p) => {
+                                        send_cmd::<MsgType>(MsgType::StopMotors, p).ok();
+                                    }
+                                    Err(_) => {}
+                                }
+                            };
+                        });
+                    }
+
+                    AircraftType::FixedWing => {
+                        ui.heading("Servo commands");
+
+                        ui.add_space(SPACE_BETWEEN_SECTIONS);
+                    }
+                }
+
+                ui.add_space(SPACE_BETWEEN_SECTIONS);
+
+                ui.heading("PID Coefficients");
+
+                ui.horizontal(|ui| match &mut state.config_ui {
+                    Some(config_ui) => {
+                        let p_label =
+                            &("P: ".to_owned() + &state.config_on_device.pid_coeffs.p.to_string());
+                        let i_label =
+                            &("I: ".to_owned() + &state.config_on_device.pid_coeffs.i.to_string());
+                        let d_label =
+                            &("D: ".to_owned() + &state.config_on_device.pid_coeffs.d.to_string());
+
+                        const FACTOR: f32 = 100_000.;
+                        // todo tmep to deal with poor float handling
+
+                        let mut p_int = (config_ui.pid_coeffs.p * FACTOR) as u32;
+                        let mut i_int = (config_ui.pid_coeffs.i * FACTOR) as u32;
+                        let mut d_int = (config_ui.pid_coeffs.d * FACTOR) as u32;
+
+                        ui.label(p_label);
+                        // text_edit_float(&mut config_ui.pid_coeffs.p, 0., ui);
+                        text_edit_int(&mut p_int, ui);
+
+                        ui.label(i_label);
+                        // text_edit_float(&mut config_ui.pid_coeffs.i, 0., ui);
+                        text_edit_int(&mut i_int, ui);
+
+                        ui.label(d_label);
+                        // text_edit_float(&mut config_ui.pid_coeffs.d, 0., ui);
+                        text_edit_int(&mut d_int, ui);
+
+                        config_ui.pid_coeffs.p = (p_int as f32) / FACTOR;
+                        config_ui.pid_coeffs.i = (i_int as f32) / FACTOR;
+                        config_ui.pid_coeffs.d = (d_int as f32) / FACTOR;
+
+                        ui.add_space(SPACE_BETWEEN_SECTIONS);
+
+                        if ui
+                            .add(
+                                Button::new(RichText::new("Save config to device").color(Color32::BLACK))
+                                    .fill(Color32::from_rgb(220, 120, 10)),
+                            )
+                            .clicked()
+                        {
+                            if send_payload::<MsgType, PAYLOAD_SIZE_CONFIG>(
+                                MsgType::SaveConfig,
+                                &config_ui.to_bytes(),
+                                state.common.get_port().unwrap(),
+                            )
+                                .is_err()
+                            {
+                                println!("Error saving config.")
+                            };
+                        };
+                    }
+                    None => (),
                 });
-            }
-
-            AircraftType::FixedWing => {
-                ui.heading("Servo commands");
-
-                ui.add_space(SPACE_BETWEEN_SECTIONS);
-            }
-        }
-
-        ui.add_space(SPACE_BETWEEN_SECTIONS);
-
-        ui.heading("PID Coefficients");
-
-        ui.horizontal(|ui| match &mut state.config_ui {
-            Some(config_ui) => {
-                let p_label =
-                    &("P: ".to_owned() + &state.config_on_device.pid_coeffs.p.to_string());
-                let i_label =
-                    &("I: ".to_owned() + &state.config_on_device.pid_coeffs.i.to_string());
-                let d_label =
-                    &("D: ".to_owned() + &state.config_on_device.pid_coeffs.d.to_string());
-
-                const FACTOR: f32 = 100_000.;
-                // todo tmep to deal with poor float handling
-
-                let mut p_int = (config_ui.pid_coeffs.p * FACTOR) as u32;
-                let mut i_int = (config_ui.pid_coeffs.i * FACTOR) as u32;
-                let mut d_int = (config_ui.pid_coeffs.d * FACTOR) as u32;
-
-                ui.label(p_label);
-                // text_edit_float(&mut config_ui.pid_coeffs.p, 0., ui);
-                text_edit_int(&mut p_int, ui);
-
-                ui.label(i_label);
-                // text_edit_float(&mut config_ui.pid_coeffs.i, 0., ui);
-                text_edit_int(&mut i_int, ui);
-
-                ui.label(d_label);
-                // text_edit_float(&mut config_ui.pid_coeffs.d, 0., ui);
-                text_edit_int(&mut d_int, ui);
-
-                config_ui.pid_coeffs.p = (p_int as f32) / FACTOR;
-                config_ui.pid_coeffs.i = (i_int as f32) / FACTOR;
-                config_ui.pid_coeffs.d = (d_int as f32) / FACTOR;
-
-                ui.add_space(SPACE_BETWEEN_SECTIONS);
-
-                if ui
-                    .add(
-                        Button::new(RichText::new("Save config to device").color(Color32::BLACK))
-                            .fill(Color32::from_rgb(220, 120, 10)),
-                    )
-                    .clicked()
-                {
-                    if send_payload::<MsgType, PAYLOAD_SIZE_CONFIG>(
-                        MsgType::SaveConfig,
-                        &config_ui.to_bytes(),
-                        state.common.get_port().unwrap(),
-                    )
-                    .is_err()
-                    {
-                        println!("Error saving config.")
-                    };
-                };
-            }
-            None => (),
-        });
+            });
     });
 
     engine_updates
