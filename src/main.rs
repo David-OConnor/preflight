@@ -216,11 +216,13 @@ impl State {
         let mut rx_buf = [0; SYS_AP_STATUS_SIZE + PAYLOAD_START_I + CRC_LEN];
         port.read_exact(&mut rx_buf)?;
 
-        let sys_status: [u8; SYS_AP_STATUS_SIZE] = rx_buf
+        let sys_ap_status: [u8; SYS_AP_STATUS_SIZE] = rx_buf
             [PAYLOAD_START_I..SYS_AP_STATUS_SIZE + PAYLOAD_START_I]
             .try_into()
             .unwrap();
-        self.system_status = sys_status.into();
+
+        self.system_status = sys_ap_status[..SYS_STATUS_SIZE].into();
+        self.autopilot_status = sys_ap_status[SYS_STATUS_SIZE..SYS_AP_STATUS_SIZE].into();
 
         Ok(())
     }
@@ -397,10 +399,9 @@ fn quat_from_buf(p: &[u8; QUATERNION_SIZE]) -> Quaternion {
     }
 }
 
-impl From<[u8; SYS_STATUS_SIZE]> for SystemStatus {
-    fn from(p: [u8; SYS_STATUS_SIZE]) -> Self {
+impl From<&[u8]> for SystemStatus {
+    fn from(p: &[u8]) -> Self {
         SystemStatus {
-            // todo: Getting some errors here.
             imu: p[0].try_into().unwrap_or_default(),
             baro: p[1].try_into().unwrap_or_default(),
             gps: p[2].try_into().unwrap_or_default(),
@@ -413,6 +414,34 @@ impl From<[u8; SYS_STATUS_SIZE]> for SystemStatus {
             osd: p[9].try_into().unwrap_or_default(),
             rf_control_fault: p[10] != 0,
             esc_rpm_fault: p[11] != 0,
+        }
+    }
+}
+
+impl From<&[u8]> for AutopilotStatus {
+    fn from(p: &[u8]) -> Self {
+        let alt_hold = match p[0] {
+            0 => None,
+            1 => Some((
+                p[1].try_into().unwrap(),
+                f32::from_be_bytes(p[2..6].try_into().unwrap())
+            )),
+            _ => unimplemented!()
+        };
+
+        let hdg_hold = match p[6] {
+            0 => None,
+            1 => Some(
+                f32::from_be_bytes(p[7..11].try_into().unwrap())
+            ),
+            _ => unimplemented!()
+        };
+
+        AutopilotStatus {
+            alt_hold,
+            hdg_hold,
+            yaw_assist: p[11].try_into().unwrap_or_default(),
+            ..Default::default()
         }
     }
 }

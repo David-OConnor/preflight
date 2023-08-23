@@ -16,13 +16,13 @@ pub const WAYPOINTS_SIZE: usize = MAX_WAYPOINTS * WAYPOINT_SIZE;
 pub const SET_SERVO_POSIT_SIZE: usize = 1 + F32_SIZE;
 pub const WAYPOINT_MAX_NAME_LEN: usize = 7;
 pub const SYS_STATUS_SIZE: usize = 12;
-pub const AP_STATUS_SIZE: usize = 0; // todo
+pub const AP_STATUS_SIZE: usize = 12;
 pub const SYS_AP_STATUS_SIZE: usize = SYS_STATUS_SIZE + AP_STATUS_SIZE;
 pub const CONTROL_MAPPING_QUAD_SIZE: usize = 2; // For quad only atm. Address this.
 
 pub const SET_MOTOR_POWER_SIZE: usize = F32_SIZE * 4;
 
-pub const CONFIG_SIZE: usize = F32_SIZE * 3; // todo: Currently PID only.
+pub const CONFIG_SIZE: usize = F32_SIZE * 4; // todo: Currently PID only.
 
 pub struct DecodeError {}
 
@@ -129,6 +129,7 @@ pub struct PidCoeffs {
     pub p: f32,
     pub i: f32,
     pub d: f32,
+    pub att_ttc: f32,
 }
 
 #[derive(Default, Clone)]
@@ -142,6 +143,7 @@ impl UserConfig {
             p: f32::from_be_bytes(buf[0..4].try_into().unwrap()),
             i: f32::from_be_bytes(buf[4..8].try_into().unwrap()),
             d: f32::from_be_bytes(buf[8..12].try_into().unwrap()),
+            att_ttc: f32::from_be_bytes(buf[12..16].try_into().unwrap()),
         };
         Self {
             pid_coeffs,
@@ -155,6 +157,7 @@ impl UserConfig {
         result[..4].clone_from_slice(&self.pid_coeffs.p.to_be_bytes());
         result[4..8].clone_from_slice(&self.pid_coeffs.i.to_be_bytes());
         result[8..12].clone_from_slice(&self.pid_coeffs.d.to_be_bytes());
+        result[12..16].clone_from_slice(&self.pid_coeffs.att_ttc.to_be_bytes());
 
         result
     }
@@ -333,16 +336,17 @@ pub struct SystemStatus {
     pub esc_rpm_fault: bool,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, TryFromPrimitive)]
+#[repr(u8)]
 pub enum AltType {
     /// Above ground level (eg from a TOF sensor)
-    Agl,
+    Agl = 0,
     /// Mean sea level (eg from GPS or baro)
-    Msl,
+    Msl = 1,
 }
 
 #[repr(u8)] // for USB serialization
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, TryFromPrimitive)]
 pub enum YawAssist {
     Disabled = 0,
     YawAssist = 1,

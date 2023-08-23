@@ -317,7 +317,7 @@ fn add_link_stats(status: SensorStatus, link_stats: &LinkStats, ui: &mut Ui) {
 
 fn add_control_data(status: SensorStatus, ch_data: &Option<ChannelData>, ui: &mut Ui) {
     ui.vertical(|ui| {
-        ui.heading("Control commands");
+        ui.heading(RichText::new("Control commands").color(Color32::WHITE));
 
         if status == SensorStatus::Pass && ch_data.is_some() {
             let controls = ch_data.as_ref().unwrap();
@@ -561,13 +561,14 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                 AltType::Msl => "MSL",
                 AltType::Agl => "AGL",
             };
-            format!("{}m {type_lbl}", val as u16)
+            // format!("{}m {type_lbl}", val as u16)
+            format!("{:.1}m {type_lbl}", val)
         }
         None => "Off".to_owned(),
     };
 
-    let hdg_hold = match state.autopilot_status.alt_hold {
-        Some((alt_type, val)) => format!("{}°", val * 360. / TAU),
+    let hdg_hold = match state.autopilot_status.hdg_hold {
+        Some(val) => format!("{}°", val * 360. / TAU),
         None => "Off".to_owned(),
     };
 
@@ -601,8 +602,6 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
                 ui.spacing_mut().slider_width = SLIDER_WIDTH;
 
-                // ui.heading("AnyLeaf Preflight");
-
                 let aircraft_type = match state.aircraft_type {
                     AircraftType::Quadcopter => "Quadcopter",
                     AircraftType::FixedWing => "Fixed wing",
@@ -615,7 +614,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                 ui.add_space(SPACE_BETWEEN_SECTIONS);
 
                 ui.vertical(|ui| {
-                    ui.heading("Sensors");
+                    ui.heading(RichText::new("Sensors").color(Color32::WHITE));
 
                     ui.horizontal(|ui| {
                         // todo: Center these.
@@ -728,7 +727,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
                 ui.add_space(SPACE_BETWEEN_SECTIONS);
 
-                ui.heading("Control link signal");
+                ui.heading(RichText::new("Control link signal").color(Color32::WHITE));
                 // todo: Evaluate which of these you want.
                 // todo: RSSI 2, antenna etc A/R only if full diversity
 
@@ -736,7 +735,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
                 ui.add_space(SPACE_BETWEEN_SECTIONS);
 
-                ui.heading("Autopilot status");
+                ui.heading(RichText::new("Autopilot status").color(Color32::WHITE));
 
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
@@ -761,7 +760,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
                 ui.add_space(SPACE_BETWEEN_SECTIONS);
 
-                ui.heading("Motor power settings and RPM");
+                ui.heading(RichText::new("Motor power settings and RPM").color(Color32::WHITE));
 
 
                 // todo: Put back
@@ -971,7 +970,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                     }
 
                     AircraftType::FixedWing => {
-                        ui.heading("Servo commands");
+                        ui.heading(RichText::new("Servo commands").color(Color32::WHITE));
 
                         ui.add_space(SPACE_BETWEEN_SECTIONS);
                     }
@@ -979,7 +978,7 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
 
                 ui.add_space(SPACE_BETWEEN_SECTIONS);
 
-                ui.heading("PID Coefficients");
+                ui.heading(RichText::new("Rate PID coefficients").color(Color32::WHITE));
 
                 ui.horizontal(|ui| match &mut state.config_ui {
                     Some(config_ui) => {
@@ -989,13 +988,16 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                             &("I: ".to_owned() + &state.config_on_device.pid_coeffs.i.to_string());
                         let d_label =
                             &("D: ".to_owned() + &state.config_on_device.pid_coeffs.d.to_string());
+                        let att_ttc_label =
+                            &("Att TTC: ".to_owned() + &state.config_on_device.pid_coeffs.att_ttc.to_string());
 
-                        const FACTOR: f32 = 100_000.;
+                        const FACTOR: f32 = 1_000.;
                         // todo tmep to deal with poor float handling
 
                         let mut p_int = (config_ui.pid_coeffs.p * FACTOR) as u32;
                         let mut i_int = (config_ui.pid_coeffs.i * FACTOR) as u32;
                         let mut d_int = (config_ui.pid_coeffs.d * FACTOR) as u32;
+                        let mut att_ttc_int = (config_ui.pid_coeffs.att_ttc * FACTOR) as u32;
 
                         ui.label(p_label);
                         // text_edit_float(&mut config_ui.pid_coeffs.p, 0., ui);
@@ -1009,9 +1011,14 @@ pub fn run(state: &mut State, ctx: &egui::Context, scene: &mut Scene) -> EngineU
                         // text_edit_float(&mut config_ui.pid_coeffs.d, 0., ui);
                         text_edit_int(&mut d_int, ui);
 
+                        ui.label(att_ttc_label);
+                        // text_edit_float(&mut config_ui.pid_coeffs.d, 0., ui);
+                        text_edit_int(&mut att_ttc_int, ui);
+
                         config_ui.pid_coeffs.p = (p_int as f32) / FACTOR;
                         config_ui.pid_coeffs.i = (i_int as f32) / FACTOR;
                         config_ui.pid_coeffs.d = (d_int as f32) / FACTOR;
+                        config_ui.pid_coeffs.att_ttc = (att_ttc_int as f32) / FACTOR;
 
                         ui.add_space(SPACE_BETWEEN_SECTIONS);
 

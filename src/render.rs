@@ -32,7 +32,7 @@ use crate::{render, ui, State, READ_INTERVAL_MS};
 pub const BACKGROUND_COLOR: (f32, f32, f32) = (0.9, 0.9, 0.9);
 const WINDOW_TITLE: &str = "Corvus Preflight";
 const WINDOW_WIDTH: f32 = 1_400.;
-const WINDOW_HEIGHT: f32 = 1_300.;
+const WINDOW_HEIGHT: f32 = 1_000.;
 
 /// Convert from the coordinate system we use on the aircraft, to the one used by the rendering
 /// system. This reverseds Y and Z.
